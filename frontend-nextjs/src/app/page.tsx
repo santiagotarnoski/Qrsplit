@@ -413,10 +413,19 @@ export default function QRSplitApp() {
     }
   };
 
+  // Reemplazar la función updateItemAssignees completa en page.tsx
+// Reemplazar la función updateItemAssignees completa en page.tsx
+
   const updateItemAssignees = async (itemId: number, newAssignees: number[]) => {
     if (!currentSession) return;
     
+    // Guardar estado original ANTES de hacer cambios optimistas (fuera del try)
+    const originalSession = { ...currentSession };
+    const previousAssignees = currentSession.items.find(item => item.id === itemId)?.assignees || [];
+    
     try {
+      
+      // Mostrar cambio optimistamente
       const updatedItems = currentSession.items.map(item => 
         item.id === itemId ? { ...item, assignees: newAssignees } : item
       );
@@ -426,13 +435,48 @@ export default function QRSplitApp() {
         items: updatedItems
       });
 
-      await fetchSplits();
+      console.log(`🔄 [UPDATE ASSIGNEES] Enviando request para item ${itemId}`);
+      console.log(`👥 [ASSIGNEES] Previous: [${previousAssignees}] → New: [${newAssignees}]`);
+
+      // Enviar al backend
+      const response = await fetch(`http://localhost:3000/api/sessions/${currentSession.sessionId}/items/${itemId}/assignees`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          assignees: newAssignees,
+          previousAssignees: previousAssignees
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('❌ [UPDATE ASSIGNEES] Error response:', response.status, errorData);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorData}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ [UPDATE ASSIGNEES] Success:', data);
+      
+      // Actualizar con respuesta del servidor (si no viene del socket)
+      if (!lastUpdate || lastUpdate.type !== 'item-assignees-updated') {
+        setCurrentSession(data.session);
+        if (data.splits) {
+          setSplits(data.splits);
+        }
+      }
+      
       setEditingItem(null);
+      
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error actualizando item');
+      console.error('🔥 [UPDATE ASSIGNEES] Error:', err);
+      setError(err instanceof Error ? err.message : 'Error actualizando asignaciones');
+      
+      // Revertir al estado original (antes de los cambios optimistas)
+      setCurrentSession(originalSession);
     }
   };
-
   const joinSession = async () => {
     if (!currentSession) return;
     

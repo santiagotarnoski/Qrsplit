@@ -538,6 +538,94 @@ app.post('/api/sessions/:sessionId/items', async (req, res) => {
   }
 });
 
+// Reemplazar el endpoint PUT /api/sessions/:sessionId/items/:itemId/assignees en server.js
+
+app.put('/api/sessions/:sessionId/items/:itemId/assignees', async (req, res) => {
+  try {
+    const { sessionId, itemId } = req.params;
+    const { assignees } = req.body;
+
+    console.log(`📝 [UPDATE ASSIGNEES] Item ${itemId} → Sesión ${sessionId}`);
+    console.log(`👥 [ASSIGNEES] Nuevas asignaciones:`, assignees);
+    console.log(`🔍 [DEBUG] itemId type:`, typeof itemId, 'value:', itemId);
+
+    // Validar que itemId no esté vacío
+    if (!itemId || itemId.trim() === '') {
+      console.error(`❌ [ERROR] itemId vacío o inválido: ${itemId}`);
+      return res.status(400).json({ error: `itemId inválido: ${itemId}` });
+    }
+
+    // Verificar que el item existe y pertenece a la sesión
+    const existingItem = await prisma.item.findFirst({
+      where: {
+        id: itemId,  // Usar itemId como string directamente
+        sessionId: sessionId
+      }
+    });
+
+    if (!existingItem) {
+      console.error(`❌ [ERROR] Item ${itemId} no encontrado en sesión ${sessionId}`);
+      return res.status(404).json({ error: `Item ${itemId} no encontrado en esta sesión` });
+    }
+
+    console.log(`✅ [FOUND] Item existente:`, existingItem);
+
+    // Actualizar item en la base de datos
+    const updatedItem = await prisma.item.update({
+      where: { 
+        id: itemId  // Usar itemId como string directamente
+      },
+      data: {
+        assignees: assignees || []
+      }
+    });
+
+    console.log(`✅ [UPDATED] Item actualizado:`, updatedItem);
+
+    // Obtener sesión completa actualizada
+    const session = await prisma.session.findUnique({
+      where: { sessionId },
+      include: {
+        participants: true,
+        items: true
+      }
+    });
+
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    // ✨ AUTO-CALCULAR SPLITS cuando se cambian asignaciones
+    let splits = null;
+    if (session.participants.length > 0) {
+      splits = SplitEngine.calculateSplits(session, SplitMethods.PROPORTIONAL);
+      console.log(`🧮 [AUTO-SPLIT] Recalculado después de cambiar asignaciones`);
+    }
+
+    // 🔄 REAL-TIME: Broadcast del cambio de asignaciones
+    await broadcastSessionUpdate(sessionId, 'item-assignees-updated', {
+      item: updatedItem,
+      previousAssignees: req.body.previousAssignees || [],
+      newAssignees: assignees,
+      message: `Asignaciones actualizadas para ${updatedItem.name}`
+    });
+
+    res.json({
+      success: true,
+      item: updatedItem,
+      session,
+      splits
+    });
+
+  } catch (error) {
+    console.error("🔥 [ERROR /items/:id/assignees]", error);
+    res.status(500).json({ 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
 // 🔄 MEJORADO: Calcular splits con real-time
 app.post('/api/sessions/:sessionId/calculate-splits', async (req, res) => {
   try {
@@ -856,6 +944,7 @@ io.on('connection', (socket) => {
   });
 });
 
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ 
@@ -870,6 +959,7 @@ app.use((req, res) => {
       'GET /api/sessions/:id/connected-users',
       'POST /api/sessions/:id/join',
       'POST /api/sessions/:id/items',
+      'PUT /api/sessions/:id/items/:itemId/assignees', // ← NUEVO
       'GET /api/sessions/:id/splits',
       'POST /api/sessions/:id/calculate-splits',
       'POST /api/test/numbers',

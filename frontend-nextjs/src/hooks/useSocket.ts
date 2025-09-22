@@ -78,24 +78,28 @@ export const useSocket = () => {
       addNotification('Reconectado exitosamente');
     });
 
-    // Event listeners de la aplicación
     socket.on('session-updated', (data: any) => {
-      console.log('Session updated:', data);
-      setLastUpdate(data);
-      
-      switch (data.type) {
-        case 'participant-joined':
-          addNotification(`${data.data.participant.name || data.data.participant.userId} se unió`);
-          break;
-        case 'item-added':
-          addNotification(`${data.data.item.name} agregado`);
-          break;
-        case 'splits-calculated':
-          addNotification('División de pagos actualizada');
-          break;
-      }
+        console.log('Session updated:', data);
+        setLastUpdate(data);
+  
+        switch (data.type) {
+            case 'participant-joined':
+                addNotification(`${data.data.participant.name || data.data.participant.userId} se unió`);
+                break;
+            case 'item-added':
+                addNotification(`${data.data.item.name} agregado`);
+                break;
+            case 'item-assignees-updated':
+                addNotification(`Asignaciones actualizadas para ${data.data.item.name}`);
+                break;
+            case 'splits-calculated':
+                addNotification('División de pagos actualizada');
+                break;
+            default:
+                addNotification('Sesión actualizada');
+            break;
+        }
     });
-
     socket.on('user-connected', (data: any) => {
       console.log('Usuario conectado:', data);
       setConnectedUsers(prev => [
