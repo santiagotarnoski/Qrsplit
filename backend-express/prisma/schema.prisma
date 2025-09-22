@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id            String   @id @default(cuid())
+  sessionId     String   @unique @map("session_id")
+  merchantId    String   @map("merchant_id")
+  status        String   @default("active")
+  totalAmount   Decimal  @default(0) @map("total_amount") @db.Decimal(18, 6)
+  participantsCount Int  @default(0) @map("participants_count")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  timeoutAt     DateTime? @map("timeout_at")
+
+  participants  Participant[]
+  items         Item[]
+  payments      Payment[]
+
+  @@map("sessions")
+}
+
+model Participant {
+  id            String   @id @default(cuid())
+  sessionId     String   @map("session_id")
+  userId        String   @map("user_id")
+  name          String?  @map("name")  // ← CAMPO AGREGADO
+  walletAddress String?  @map("wallet_address")
+  joinedAt      DateTime @default(now()) @map("joined_at")
+
+  session       Session  @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+  
+  @@map("participants")
+}
+
+model Item {
+  id         String   @id @default(cuid())
+  sessionId  String   @map("session_id")
+  name       String
+  amount     Decimal  @db.Decimal(18, 6)
+  tax        Decimal  @default(0) @db.Decimal(18, 6)
+  tip        Decimal  @default(0) @db.Decimal(18, 6)
+  assignees  String[] @default([])
+  addedAt    DateTime @default(now()) @map("added_at")
+
+  session    Session  @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+  
+  @@map("items")
+}
+
+model Payment {
+  id          String   @id @default(cuid())
+  sessionId   String   @map("session_id")
+  fromAddress String   @map("from_address")
+  toAddress   String   @map("to_address")
+  amount      Decimal  @db.Decimal(18, 6)
+  tokenAddress String  @map("token_address")
+  txHash      String?  @map("tx_hash")
+  status      String   @default("pending")
+  createdAt   DateTime @default(now()) @map("created_at")
+  confirmedAt DateTime? @map("confirmed_at")
+
+  session     Session  @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+  
+  @@map("payments")
+}

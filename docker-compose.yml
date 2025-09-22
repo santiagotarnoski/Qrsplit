@@ -1,0 +1,50 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    container_name: qrsplit-postgres
+    environment:
+      POSTGRES_DB: qrsplit
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - qrsplit-network
+
+  # Redis Cache & Pub/Sub
+  redis:
+    image: redis:7-alpine
+    container_name: qrsplit-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - qrsplit-network
+
+  # Starknet Devnet (Local blockchain) - Imagen corregida
+  starknet:
+    image: 0xspaceshard/starknet-devnet-rs:latest
+    container_name: qrsplit-starknet
+    ports:
+      - "5050:5050"
+    command: [
+      "--host", "0.0.0.0",
+      "--port", "5050",
+      "--seed", "42",
+      "--accounts", "10",
+      "--initial-balance", "1000000000000000000000"
+    ]
+    networks:
+      - qrsplit-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  qrsplit-network:
+    driver: bridge
