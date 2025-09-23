@@ -592,7 +592,7 @@ export default function QRSplitApp() {
     if (!currentSession) return '';
     
     const baseURL = typeof window !== 'undefined' ? window.location.origin : '';
-    return `${baseURL}/join/${currentSession.sessionId}`;
+    return `${baseURL}/session/${currentSession.sessionId}`;
   };
 
   const copyToClipboard = async () => {
