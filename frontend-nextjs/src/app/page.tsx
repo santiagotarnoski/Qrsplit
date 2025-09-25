@@ -9,6 +9,9 @@ import { QrCode, Users, Plus, DollarSign, Calculator, TrendingUp, User, Check, X
 
 // Hook de Socket.io (importar desde tu archivo)
 import { useSocket } from '../hooks/useSocket';
+// NUEVO: Imports de wallet (agregar después de tus imports existentes)
+import { WalletButton } from '../components/WalletButton';
+import { useWallet } from '../hooks/useWallet';
 
 // Componente de notificaciones real-time simple
 const RealtimeNotifications = ({ isConnected, connectedUsers, notifications, onRemoveNotification, onClearNotifications }: any) => {
@@ -276,6 +279,8 @@ export default function QRSplitApp() {
     clearNotifications,
     removeNotification
   } = useSocket();
+  const { address: connectedWalletAddress, isConnected: walletConnected } = useWallet();
+
 
   useEffect(() => {
     checkAPIStatus();
@@ -657,6 +662,11 @@ export default function QRSplitApp() {
               </Badge>
             )}
           </div>
+          {/* PRUEBA: Wallet Button */}
+            <div className="ml-4">
+              <WalletButton size="sm" variant="outline" />
+            </div>
+            
           <p className="text-xl text-gray-600 mb-4">
             Escanea, divide, paga - Instantáneo y justo
           </p>
