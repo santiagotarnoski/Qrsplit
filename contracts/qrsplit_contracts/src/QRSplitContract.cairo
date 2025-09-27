@@ -53,24 +53,24 @@ trait IQRSplitContract<TContractState> {
 
 // Estructuras de datos
 #[derive(Drop, Serde, starknet::Store, Clone)]
-struct SessionInfo {
-    session_id: felt252,
-    merchant: ContractAddress,
-    merchant_id: felt252,
-    total_amount: u256,
-    participants_count: u32,
-    payments_received: u256,
-    created_at: u64,
-    is_active: bool,
-    is_completed: bool
+pub struct SessionInfo {
+    pub session_id: felt252,
+    pub merchant: ContractAddress,
+    pub merchant_id: felt252,
+    pub total_amount: u256,
+    pub participants_count: u32,
+    pub payments_received: u256,
+    pub created_at: u64,
+    pub is_active: bool,
+    pub is_completed: bool
 }
 
 #[derive(Drop, Serde)]
-struct PaymentStatus {
-    total_participants: u32,
-    paid_participants: u32,
-    total_collected: u256,
-    is_fully_paid: bool
+pub struct PaymentStatus {
+    pub total_participants: u32,
+    pub paid_participants: u32,
+    pub total_collected: u256,
+    pub is_fully_paid: bool
 }
 
 #[starknet::contract]

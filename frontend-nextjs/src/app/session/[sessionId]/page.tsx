@@ -42,7 +42,7 @@ export default function SessionPage() {
         throw new Error('Sesión no encontrada');
       }
       const data = await response.json();
-      setSession(data);
+      setSession(data.session || data); // Asegurar compatibilidad con diferentes formatos de respuesta
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error cargando sesión');
     } finally {
@@ -55,13 +55,15 @@ export default function SessionPage() {
     
     setJoining(true);
     try {
+      const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+      
       const response = await fetch(`http://localhost:3000/api/sessions/${sessionId}/join`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          user_id: `user_${Date.now()}`,
+          user_id: userId,
           name: userName.trim(),
           wallet_address: null
         }),
@@ -71,9 +73,21 @@ export default function SessionPage() {
         throw new Error('Error uniéndose a la sesión');
       }
 
-      await response.json();
-      router.push('/');
+      const joinResult = await response.json();
+      console.log('✅ [JOIN] Usuario unido exitosamente:', joinResult);
+      
+      // CAMBIO CRÍTICO: Pasar sessionId, userName y userId a la página principal
+      const params = new URLSearchParams({
+        sessionId: sessionId,
+        userName: userName.trim(),
+        userId: userId,
+        joined: 'true'
+      });
+      
+      router.push(`/?${params.toString()}`);
+      
     } catch (err) {
+      console.error('❌ [JOIN] Error:', err);
       setError(err instanceof Error ? err.message : 'Error uniéndose a sesión');
     } finally {
       setJoining(false);
@@ -126,13 +140,28 @@ export default function SessionPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-4 text-sm mb-4">
-              <div><strong>ID:</strong> {session.sessionId.slice(-8)}...</div>
+              <div><strong>Local:</strong> {session.merchantId}</div>
               <div><strong>Estado:</strong> {session.status}</div>
               <div><strong>Participantes:</strong> {session.participantsCount}</div>
-              <div><strong>Total:</strong> ${session.totalAmount}</div>
+              <div><strong>Total:</strong> ${parseFloat(session.totalAmount).toFixed(2)}</div>
             </div>
             
-            {session.items.length > 0 && (
+            {/* Mostrar participantes existentes */}
+            {session.participants && session.participants.length > 0 && (
+              <div className="mb-4">
+                <h4 className="font-medium mb-2">Participantes actuales:</h4>
+                <div className="space-y-1">
+                  {session.participants.map((participant: any, index: number) => (
+                    <div key={index} className="flex items-center text-sm bg-blue-50 p-2 rounded">
+                      <Users className="w-4 h-4 mr-2 text-blue-600" />
+                      <span>{participant.name || participant.userId}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {session.items && session.items.length > 0 && (
               <div className="mt-4">
                 <h4 className="font-medium mb-2">Items en la cuenta:</h4>
                 <div className="space-y-1">
@@ -160,6 +189,7 @@ export default function SessionPage() {
                 onChange={(e: any) => setUserName(e.target.value)}
                 placeholder="Ingresa tu nombre"
                 onKeyDown={(e: any) => e.key === 'Enter' && joinSession()}
+                disabled={joining}
               />
             </div>
             
@@ -177,6 +207,12 @@ export default function SessionPage() {
                 Volver
               </Button>
             </div>
+            
+            {error && (
+              <div className="bg-red-50 border border-red-200 p-3 rounded-lg">
+                <p className="text-sm text-red-800">{error}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

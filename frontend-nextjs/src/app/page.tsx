@@ -5,13 +5,14 @@ import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@app/components/ui/card';
 import { Badge } from '@app/components/ui/badge';
-import { QrCode, Users, Plus, DollarSign, Calculator, TrendingUp, User, Check, X, Edit, Share2, Copy, Wifi, WifiOff, Bell } from 'lucide-react';
-
+import { QrCode, Users, Plus, DollarSign, Calculator, TrendingUp, User, Check, X, Edit, Share2, Copy, Wifi, WifiOff, Bell, Wallet, Link, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 // Hook de Socket.io (importar desde tu archivo)
 import { useSocket } from '../hooks/useSocket';
-// NUEVO: Imports de wallet (agregar después de tus imports existentes)
+// NUEVO: Imports de wallet y blockchain
 import { WalletButton } from '../components/WalletButton';
 import { useWallet } from '../hooks/useWallet';
+import { useContract } from '../hooks/useContract';
+import { useSearchParams } from 'next/navigation';
 
 // Componente de notificaciones real-time simple
 const RealtimeNotifications = ({ isConnected, connectedUsers, notifications, onRemoveNotification, onClearNotifications }: any) => {
@@ -279,8 +280,93 @@ export default function QRSplitApp() {
     clearNotifications,
     removeNotification
   } = useSocket();
-  const { address: connectedWalletAddress, isConnected: walletConnected } = useWallet();
 
+  // NUEVO: Blockchain integration
+  const { isConnected: walletConnected, address: walletAddress, formatAddress } = useWallet();
+  console.log('🔍 [WALLET DEBUG]', { walletConnected, walletAddress, formatAddress });
+  const {
+    createSession: createBlockchainSession,
+    joinSession: joinBlockchainSession,
+    makePayment: makeBlockchainPayment,
+    executeGroupPayment,
+    getSession: getBlockchainSession,
+    getPaymentStatus,
+    isLoading: contractLoading,
+    error: contractError,
+    clearError: clearContractError
+  } = useContract();
+
+  // NUEVO: Estados para blockchain
+  const [blockchainSessionId, setBlockchainSessionId] = useState<string | null>(null);
+  const [paymentStates, setPaymentStates] = useState<{ [userId: string]: 'pending' | 'paying' | 'paid' | 'failed' }>({});
+  const [showGroupPayButton, setShowGroupPayButton] = useState(false);
+
+  // Auto-cargar sesión desde URL parameters
+const searchParams = useSearchParams();
+
+useEffect(() => {
+  const sessionIdFromUrl = searchParams.get('sessionId');
+  const userNameFromUrl = searchParams.get('userName');
+  const userIdFromUrl = searchParams.get('userId');
+  const justJoined = searchParams.get('joined');
+  
+  console.log('🔍 [URL CHECK]', { sessionIdFromUrl, userNameFromUrl, justJoined, hasCurrentSession: !!currentSession });
+  
+  if (sessionIdFromUrl && !currentSession) {
+    console.log('📍 [URL] Cargando sesión desde URL:', sessionIdFromUrl);
+    loadSessionFromUrl(sessionIdFromUrl);
+    
+    if (userNameFromUrl && userIdFromUrl) {
+      setCurrentUserName(userNameFromUrl);
+    }
+  }
+}, [searchParams, currentSession]);
+
+const loadSessionFromUrl = async (sessionId: string) => {
+  setLoading(true);
+  setError(null);
+  
+  try {
+    console.log('🔄 [LOAD] Cargando sesión desde URL:', sessionId);
+    
+    const response = await fetch(`http://localhost:3000/api/sessions/${sessionId}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('✅ [LOAD] Respuesta del backend:', data);
+    
+    // Manejar diferentes formatos de respuesta del backend
+    const session = data.session || data;
+    setCurrentSession(session);
+    
+    // Cargar splits si hay participantes
+    if (session.participants?.length > 0) {
+      console.log('📊 [SPLITS] Cargando splits...');
+      await fetchSplitsForSession(sessionId);
+    }
+    
+  } catch (error) {
+    console.error('❌ [LOAD] Error cargando sesión desde URL:', error);
+    setError('Error cargando sesión desde el enlace');
+  } finally {
+    setLoading(false);
+  }
+};
+
+const fetchSplitsForSession = async (sessionId: string) => {
+  try {
+    const response = await fetch(`http://localhost:3000/api/sessions/${sessionId}/splits`);
+    if (response.ok) {
+      const data = await response.json();
+      console.log('✅ [SPLITS] Splits cargados:', data);
+      setSplits(data.splits);
+    }
+  } catch (error) {
+    console.error('❌ [SPLITS] Error cargando splits:', error);
+  }
+};
 
   useEffect(() => {
     checkAPIStatus();
@@ -321,6 +407,27 @@ export default function QRSplitApp() {
     };
   }, [currentSession?.sessionId, isConnected, currentUserName, joinSocketSession, leaveSocketSession, currentUserId]);
 
+  // NUEVO: Verificar estado de pagos blockchain
+  useEffect(() => {
+    const checkPaymentStatus = async () => {
+      if (blockchainSessionId && splits) {
+        try {
+          const status = await getPaymentStatus(blockchainSessionId);
+          
+          // Verificar si todos han pagado
+          if (status.is_fully_paid && status.total_participants > 0) {
+            setShowGroupPayButton(true);
+          }
+        } catch (error) {
+          console.error('Error checking payment status:', error);
+        }
+      }
+    };
+
+    const interval = setInterval(checkPaymentStatus, 5000);
+    return () => clearInterval(interval);
+  }, [blockchainSessionId, splits, getPaymentStatus]);
+
   const checkAPIStatus = async () => {
     try {
       const response = await fetch('http://localhost:3000/health');
@@ -357,6 +464,24 @@ export default function QRSplitApp() {
       // Prompt for user name and join socket session
       const userName = prompt('Ingresa tu nombre para la sesión:') || `Usuario ${currentUserId.slice(-5)}`;
       setCurrentUserName(userName);
+
+      // NUEVO: Crear sesión en blockchain si wallet está conectada
+      if (walletConnected && walletAddress) {
+        console.log('🔗 [BLOCKCHAIN] Creando sesión en smart contract...');
+        const blockchainResult = await createBlockchainSession(
+          data.session.sessionId,
+          merchantId,
+          walletAddress,
+          parseFloat(data.session.totalAmount) || 0
+        );
+        
+        if (blockchainResult.success) {
+          setBlockchainSessionId(data.session.sessionId);
+          console.log('✅ [BLOCKCHAIN] Sesión creada:', blockchainResult.txHash);
+        } else {
+          console.error('❌ [BLOCKCHAIN] Error creando sesión:', blockchainResult.error);
+        }
+      }
       
       console.log('Session created:', data);
     } catch (err) {
@@ -417,9 +542,6 @@ export default function QRSplitApp() {
       if (stopTyping) stopTyping();
     }
   };
-
-  // Reemplazar la función updateItemAssignees completa en page.tsx
-// Reemplazar la función updateItemAssignees completa en page.tsx
 
   const updateItemAssignees = async (itemId: number, newAssignees: number[]) => {
     if (!currentSession) return;
@@ -482,6 +604,7 @@ export default function QRSplitApp() {
       setCurrentSession(originalSession);
     }
   };
+
   const joinSession = async () => {
     if (!currentSession) return;
     
@@ -497,7 +620,7 @@ export default function QRSplitApp() {
         body: JSON.stringify({
           user_id: currentUserId,
           name: userName,
-          wallet_address: null
+          wallet_address: walletAddress || null
         }),
       });
 
@@ -507,6 +630,26 @@ export default function QRSplitApp() {
 
       const data = await response.json();
       setCurrentSession(data.session);
+
+      // NUEVO: Unirse a la sesión blockchain si wallet está conectada
+      if (walletConnected && walletAddress && blockchainSessionId) {
+        // Buscar el monto que debe pagar este usuario
+        const userSplit = splits?.participants.find(p => p.userId === currentUserId);
+        if (userSplit) {
+          console.log('🔗 [BLOCKCHAIN] Uniéndose a sesión blockchain...');
+          const blockchainResult = await joinBlockchainSession(
+            blockchainSessionId,
+            walletAddress,
+            Math.round(userSplit.amount * 100) // Convertir a centavos
+          );
+          
+          if (blockchainResult.success) {
+            console.log('✅ [BLOCKCHAIN] Unido a sesión:', blockchainResult.txHash);
+          } else {
+            console.error('❌ [BLOCKCHAIN] Error uniéndose:', blockchainResult.error);
+          }
+        }
+      }
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error uniéndose a sesión');
@@ -563,6 +706,75 @@ export default function QRSplitApp() {
     }
   };
 
+  // NUEVO: Función para pagar individual
+  const handleIndividualPayment = async (participant: Split) => {
+    if (!walletConnected || !walletAddress || !blockchainSessionId) {
+      setError('Conecta tu wallet primero');
+      return;
+    }
+
+    if (participant.userId !== currentUserId) {
+      setError('Solo puedes pagar tu propia parte');
+      return;
+    }
+
+    try {
+      setPaymentStates(prev => ({ ...prev, [participant.userId]: 'paying' }));
+      
+      console.log('💰 [PAYMENT] Realizando pago individual...', {
+        sessionId: blockchainSessionId,
+        participant: participant.userId,
+        amount: participant.amount
+      });
+
+      const result = await makeBlockchainPayment(blockchainSessionId, walletAddress);
+      
+      if (result.success) {
+        setPaymentStates(prev => ({ ...prev, [participant.userId]: 'paid' }));
+        console.log('✅ [PAYMENT] Pago exitoso:', result.txHash);
+        
+        // Mostrar notificación de éxito
+        if (notifications) {
+          notifications.push(`💰 Pago realizado exitosamente: ${formatCurrency(participant.amount)}`);
+        }
+      } else {
+        setPaymentStates(prev => ({ ...prev, [participant.userId]: 'failed' }));
+        setError(result.error || 'Error en el pago');
+      }
+    } catch (error) {
+      setPaymentStates(prev => ({ ...prev, [participant.userId]: 'failed' }));
+      setError(error instanceof Error ? error.message : 'Error realizando pago');
+    }
+  };
+
+  // NUEVO: Función para ejecutar pago grupal
+  const handleGroupPayment = async () => {
+    if (!walletConnected || !walletAddress || !blockchainSessionId) {
+      setError('Conecta tu wallet primero');
+      return;
+    }
+
+    try {
+      console.log('⚡ [GROUP PAYMENT] Ejecutando pago grupal...');
+      
+      const result = await executeGroupPayment(blockchainSessionId);
+      
+      if (result.success) {
+        console.log('✅ [GROUP PAYMENT] Pago grupal exitoso:', result.txHash);
+        setShowGroupPayButton(false);
+        
+        // Mostrar notificación de éxito
+        if (notifications) {
+          notifications.push(`🎉 Pago grupal completado! Tx: ${result.txHash?.slice(0, 10)}...`);
+        }
+      } else {
+        setError(result.error || 'Error en el pago grupal');
+      }
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Error ejecutando pago grupal');
+    }
+  };
+
   const toggleParticipantSelection = (participantId: number) => {
     setSelectedParticipants(prev => 
       prev.includes(participantId)
@@ -593,12 +805,12 @@ export default function QRSplitApp() {
     return names.join(', ');
   };
 
-  const generateQRValue = () => {
-    if (!currentSession) return '';
-    
-    const baseURL = typeof window !== 'undefined' ? window.location.origin : '';
-    return `${baseURL}/session/${currentSession.sessionId}`;
-  };
+    const generateQRValue = () => {
+      if (!currentSession) return '';
+  
+      const baseURL = typeof window !== 'undefined' ? window.location.origin : '';
+      return `${baseURL}/session/${currentSession.sessionId}`;
+    };
 
   const copyToClipboard = async () => {
     try {
@@ -661,11 +873,11 @@ export default function QRSplitApp() {
                 Real-time
               </Badge>
             )}
-          </div>
-          {/* PRUEBA: Wallet Button */}
+            {/* NUEVO: Wallet Button en header */}
             <div className="ml-4">
               <WalletButton size="sm" variant="outline" />
             </div>
+          </div>
             
           <p className="text-xl text-gray-600 mb-4">
             Escanea, divide, paga - Instantáneo y justo
@@ -677,19 +889,33 @@ export default function QRSplitApp() {
             <Badge variant={isConnected ? "default" : "secondary"}>
               Real-time: {isConnected ? '✅' : '🔄'}
             </Badge>
+            {/* NUEVO: Indicador de wallet */}
+            <Badge variant={walletConnected ? "default" : "secondary"}>
+              <Wallet className="w-3 h-3 mr-1" />
+              Wallet: {walletConnected ? '✅' : '❌'}
+            </Badge>
+            {blockchainSessionId && (
+              <Badge variant="outline">
+                <Link className="w-3 h-3 mr-1" />
+                Blockchain: ✅
+              </Badge>
+            )}
           </div>
         </div>
 
         {/* Error Display */}
-        {error && (
+        {(error || contractError) && (
           <Card className="mb-6 border-red-200 bg-red-50">
             <CardContent className="p-4">
-              <p className="text-red-800 text-sm">{error}</p>
+              <p className="text-red-800 text-sm">{error || contractError}</p>
               <Button 
                 variant="outline" 
                 size="sm" 
                 className="mt-2"
-                onClick={() => setError(null)}
+                onClick={() => {
+                  setError(null);
+                  clearContractError();
+                }}
               >
                 Cerrar
               </Button>
@@ -716,6 +942,17 @@ export default function QRSplitApp() {
                   className="w-full"
                 />
               </div>
+              
+              {/* NUEVO: Indicador de wallet en creación */}
+              {!walletConnected && (
+                <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg">
+                  <p className="text-sm text-yellow-800 flex items-center">
+                    <AlertCircle className="w-4 h-4 mr-2" />
+                    Conecta tu wallet para habilitar pagos blockchain
+                  </p>
+                </div>
+              )}
+              
               <Button 
                 onClick={createSession} 
                 disabled={loading || !merchantId}
@@ -778,6 +1015,13 @@ export default function QRSplitApp() {
                         Sincronización real-time activa
                       </div>
                     )}
+                    {/* NUEVO: Indicador blockchain en QR */}
+                    {blockchainSessionId && (
+                      <div className="flex items-center text-sm text-purple-600 mt-1">
+                        <Link className="w-4 h-4 mr-1" />
+                        Smart contract activo
+                      </div>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -823,6 +1067,10 @@ export default function QRSplitApp() {
                               <span>{participant.name || participant.userId}</span>
                               {participant.userId === currentUserId && (
                                 <Badge variant="outline" className="ml-2 text-xs">Tú</Badge>
+                              )}
+                              {/* NUEVO: Indicador de wallet */}
+                              {participant.walletAddress && (
+                                <Wallet className="w-3 h-3 ml-2 text-purple-600" />
                               )}
                             </div>
                             <div className="flex items-center space-x-2">
@@ -880,7 +1128,7 @@ export default function QRSplitApp() {
                     onChange={(e) => setItemAmount(e.target.value)}
                     onFocus={() => handleInputFocus('typing-item-amount')}
                     onBlur={handleInputBlur}
-                    placeholder=""
+                    placeholder="$2000"
                   />
                 </div>
                 
@@ -1011,7 +1259,7 @@ export default function QRSplitApp() {
               </Card>
             )}
 
-            {/* Split Calculator with Assignment Details */}
+            {/* Split Calculator with Assignment Details + BLOCKCHAIN PAYMENTS */}
             {currentSession.participants.length > 0 && splits && (
               <Card className="lg:col-span-2">
                 <CardHeader>
@@ -1023,6 +1271,13 @@ export default function QRSplitApp() {
                         <Badge className="ml-2" variant="outline">
                           <Wifi className="w-3 h-3 mr-1" />
                           Sincronizado
+                        </Badge>
+                      )}
+                      {/* NUEVO: Indicador blockchain */}
+                      {blockchainSessionId && walletConnected && (
+                        <Badge className="ml-2" variant="outline">
+                          <Link className="w-3 h-3 mr-1" />
+                          Blockchain Ready
                         </Badge>
                       )}
                     </div>
@@ -1068,11 +1323,41 @@ export default function QRSplitApp() {
                       </div>
                     </div>
 
-                    {/* Individual Splits */}
+                    {/* NUEVO: Botón de pago grupal */}
+                    {showGroupPayButton && walletConnected && blockchainSessionId && (
+                      <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="font-semibold text-green-800">¡Todos han pagado!</h4>
+                            <p className="text-sm text-green-600">Ejecuta el pago grupal para completar la transacción</p>
+                          </div>
+                          <Button
+                            onClick={handleGroupPayment}
+                            disabled={contractLoading}
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            {contractLoading ? (
+                              <>
+                                <Clock className="w-4 h-4 mr-2 animate-spin" />
+                                Procesando...
+                              </>
+                            ) : (
+                              <>
+                                <Link className="w-4 h-4 mr-2" />
+                                Ejecutar Pago Grupal
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Individual Splits con botones de pago */}
                     <div className="space-y-3">
                       {splits.participants.map((participant: Split, index: number) => {
                         const isCurrentUser = participant.userId === currentUserId;
                         const isConnected = connectedUsers.some((u: any) => u.userId === participant.userId);
+                        const paymentState = paymentStates[participant.userId] || 'pending';
                         
                         return (
                           <div key={index} className={`border rounded-lg p-4 ${isCurrentUser ? 'border-blue-300 bg-blue-50' : ''}`}>
@@ -1099,6 +1384,73 @@ export default function QRSplitApp() {
                                 </p>
                               </div>
                             </div>
+
+                            {/* NUEVO: Botón de pago blockchain */}
+                            {isCurrentUser && walletConnected && blockchainSessionId && (
+                              <div className="mt-3 pt-3 border-t">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-2">
+                                    {paymentState === 'paid' ? (
+                                      <Badge className="bg-green-600">
+                                        <CheckCircle className="w-3 h-3 mr-1" />
+                                        Pagado
+                                      </Badge>
+                                    ) : paymentState === 'paying' ? (
+                                      <Badge variant="outline">
+                                        <Clock className="w-3 h-3 mr-1 animate-spin" />
+                                        Procesando...
+                                      </Badge>
+                                    ) : paymentState === 'failed' ? (
+                                      <Badge variant="destructive">
+                                        <AlertCircle className="w-3 h-3 mr-1" />
+                                        Error
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="outline">
+                                        <Clock className="w-3 h-3 mr-1" />
+                                        Pendiente
+                                      </Badge>
+                                    )}
+                                  </div>
+
+                                  {paymentState === 'pending' && (
+                                    <Button
+                                      onClick={() => handleIndividualPayment(participant)}
+                                      disabled={contractLoading}
+                                      size="sm"
+                                      className="bg-purple-600 hover:bg-purple-700"
+                                    >
+                                      <Wallet className="w-4 h-4 mr-1" />
+                                      Pagar con Blockchain
+                                    </Button>
+                                  )}
+
+                                  {paymentState === 'failed' && (
+                                    <Button
+                                      onClick={() => handleIndividualPayment(participant)}
+                                      disabled={contractLoading}
+                                      size="sm"
+                                      variant="outline"
+                                    >
+                                      <Wallet className="w-4 h-4 mr-1" />
+                                      Reintentar
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* No wallet connected warning */}
+                            {isCurrentUser && !walletConnected && (
+                              <div className="mt-3 pt-3 border-t">
+                                <div className="bg-yellow-50 border border-yellow-200 p-3 rounded">
+                                  <p className="text-sm text-yellow-800 flex items-center">
+                                    <AlertCircle className="w-4 h-4 mr-2" />
+                                    Conecta tu wallet para pagar con blockchain
+                                  </p>
+                                </div>
+                              </div>
+                            )}
                             
                             {/* Items detail para método proporcional */}
                             {splits.method === 'proportional' && participant.items.length > 0 && (
@@ -1142,7 +1494,8 @@ export default function QRSplitApp() {
             <span>QR Sharing: ✅</span>
             <span>Real-time Splits: {isConnected ? '✅' : '🔄'}</span>
             <span>Socket.io Sync: {isConnected ? '✅' : '❌'}</span>
-            <span>Smart Contracts: 🔄 (próximo)</span>
+            <span>Smart Contracts: {blockchainSessionId ? '✅' : '🔄'}</span>
+            <span>Wallet Integration: {walletConnected ? '✅' : '❌'}</span>
             <span>Mobile Ready: ✅</span>
           </div>
         </div>
