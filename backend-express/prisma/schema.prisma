@@ -3,24 +3,24 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"  // ← Cambiar de "postgresql" a "sqlite"
-  url      = "file:./dev.db"  // ← Cambiar esta línea
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 model Session {
-  id            String   @id @default(cuid())
-  sessionId     String   @unique @map("session_id")
-  merchantId    String   @map("merchant_id")
-  status        String   @default("active")
-  totalAmount   Decimal  @default(0) @map("total_amount") @db.Decimal(18, 6)
-  participantsCount Int  @default(0) @map("participants_count")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  timeoutAt     DateTime? @map("timeout_at")
+  id               String   @id @default(cuid())
+  sessionId        String   @unique @map("session_id")
+  merchantId       String   @map("merchant_id")
+  status           String   @default("active")
+  totalAmount      Float    @default(0) @map("total_amount")
+  participantsCount Int     @default(0) @map("participants_count")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  timeoutAt        DateTime? @map("timeout_at")
 
-  participants  Participant[]
-  items         Item[]
-  payments      Payment[]
+  participants     Participant[]
+  items            Item[]
+  payments         Payment[]
 
   @@map("sessions")
 }
@@ -29,12 +29,15 @@ model Participant {
   id            String   @id @default(cuid())
   sessionId     String   @map("session_id")
   userId        String   @map("user_id")
-  name          String?  @map("name")  // ← CAMPO AGREGADO
+  name          String?  @map("name")
   walletAddress String?  @map("wallet_address")
   joinedAt      DateTime @default(now()) @map("joined_at")
+  
+  addedBy       String?  @map("added_by")
+  isOperator    Boolean  @default(false) @map("is_operator")
 
   session       Session  @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
-  
+
   @@map("participants")
 }
 
@@ -42,14 +45,14 @@ model Item {
   id         String   @id @default(cuid())
   sessionId  String   @map("session_id")
   name       String
-  amount     Decimal  @db.Decimal(18, 6)
-  tax        Decimal  @default(0) @db.Decimal(18, 6)
-  tip        Decimal  @default(0) @db.Decimal(18, 6)
-  assignees  String[] @default([])
+  amount     Float
+  tax        Float    @default(0)
+  tip        Float    @default(0)
+  assignees  String   @default("[]")
   addedAt    DateTime @default(now()) @map("added_at")
 
   session    Session  @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
-  
+
   @@map("items")
 }
 
@@ -58,7 +61,7 @@ model Payment {
   sessionId   String   @map("session_id")
   fromAddress String   @map("from_address")
   toAddress   String   @map("to_address")
-  amount      Decimal  @db.Decimal(18, 6)
+  amount      Float
   tokenAddress String  @map("token_address")
   txHash      String?  @map("tx_hash")
   status      String   @default("pending")
@@ -66,6 +69,6 @@ model Payment {
   confirmedAt DateTime? @map("confirmed_at")
 
   session     Session  @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
-  
+
   @@map("payments")
 }

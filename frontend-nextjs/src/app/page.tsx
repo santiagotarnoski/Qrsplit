@@ -13,6 +13,8 @@ import { WalletButton } from '../components/WalletButton';
 import { useWallet } from '../hooks/useWallet';
 import { useContract } from '../hooks/useContract';
 import { useSearchParams } from 'next/navigation';
+import { SimulationBanner } from '../components/SimulationBanner';
+
 
 // Componente de notificaciones real-time simple
 const RealtimeNotifications = ({ isConnected, connectedUsers, notifications, onRemoveNotification, onClearNotifications }: any) => {
@@ -202,6 +204,8 @@ interface Participant {
   userId: string;
   name?: string;
   walletAddress?: string;
+  addedBy?: string;        // NUEVO
+  isOperator?: boolean;    // NUEVO
 }
 
 interface Item {
@@ -604,6 +608,102 @@ const fetchSplitsForSession = async (sessionId: string) => {
       setCurrentSession(originalSession);
     }
   };
+  
+  // NUEVO: Función para que se una el usuario actual
+const joinCurrentUser = async () => {
+  if (!currentSession) return;
+  
+  try {
+    const userName = prompt('Ingresa tu nombre:') || `Usuario ${currentUserId.slice(-5)}`;
+    setCurrentUserName(userName);
+    
+    const response = await fetch(`http://localhost:3000/api/sessions/${currentSession.sessionId}/join`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        user_id: currentUserId, // Usar el ID del usuario actual
+        name: userName,
+        wallet_address: walletAddress || null,
+        added_by: currentUserId, // Se agregó a sí mismo
+        is_operator: true // Es quien maneja la app
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    setCurrentSession(data.session);
+
+    // Unirse a la sesión blockchain si wallet está conectada
+    if (walletConnected && walletAddress && blockchainSessionId) {
+      const userSplit = splits?.participants.find(p => p.userId === currentUserId);
+      if (userSplit) {
+        console.log('🔗 [BLOCKCHAIN] Uniéndose a sesión blockchain...');
+        const blockchainResult = await joinBlockchainSession(
+          blockchainSessionId,
+          walletAddress,
+          Math.round(userSplit.amount * 100)
+        );
+        
+        if (blockchainResult.success) {
+          console.log('✅ [BLOCKCHAIN] Unido a sesión:', blockchainResult.txHash);
+        } else {
+          console.error('❌ [BLOCKCHAIN] Error uniéndose:', blockchainResult.error);
+        }
+      }
+    }
+    
+  } catch (err) {
+    setError(err instanceof Error ? err.message : 'Error uniéndose a sesión');
+  }
+};
+
+// NUEVO: Función para agregar otra persona manualmente
+const addOtherPerson = async () => {
+  if (!currentSession) return;
+  
+  try {
+    const personName = prompt('¿Quién se está uniendo a la sesión?\n(Ej: mi hermano, Juan, etc.)');
+    
+    if (!personName || personName.trim() === '') {
+      return; // Usuario canceló
+    }
+    
+    // Generar ID único para esta persona
+    const participantUserId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+    
+    const response = await fetch(`http://localhost:3000/api/sessions/${currentSession.sessionId}/join`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        user_id: participantUserId, // ID único para esta persona
+        name: personName.trim(),
+        wallet_address: null, // No asumir wallet para participantes manuales
+        added_by: currentUserId, // Quién agregó a esta persona
+        is_operator: false // No es quien maneja la app
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    setCurrentSession(data.session);
+    
+    // Mostrar confirmación
+    console.log(`✅ [MANUAL ADD] ${personName} agregado exitosamente`);
+    
+  } catch (err) {
+    setError(err instanceof Error ? err.message : 'Error agregando persona');
+  }
+};
 
   const joinSession = async () => {
     if (!currentSession) return;
@@ -791,10 +891,32 @@ const fetchSplitsForSession = async (sessionId: string) => {
     }).format(amount);
   };
 
-  const getParticipantNames = (assignees: number[]) => {
+  const getParticipantNames = (assignees: number[] | any) => {
     if (!currentSession) return '';
     
-    const names = assignees
+    // Asegurar que assignees sea siempre un array
+    let assigneesArray: number[] = [];
+    
+    if (Array.isArray(assignees)) {
+      assigneesArray = assignees;
+    } else if (assignees && typeof assignees === 'string') {
+      // Si es un string, intentar parsearlo
+      try {
+        const parsed = JSON.parse(assignees);
+        if (Array.isArray(parsed)) {
+          assigneesArray = parsed;
+        }
+      } catch (e) {
+        console.warn('Could not parse assignees:', assignees);
+        assigneesArray = [];
+      }
+    } else {
+      // Si no es ni array ni string válido, usar array vacío
+      assigneesArray = [];
+    }
+    
+    const names = assigneesArray
+      .filter(id => typeof id === 'number')
       .map(id => currentSession.participants.find(p => p.id === id)?.name || `User ${id}`)
       .filter(Boolean);
     
@@ -805,12 +927,13 @@ const fetchSplitsForSession = async (sessionId: string) => {
     return names.join(', ');
   };
 
-    const generateQRValue = () => {
-      if (!currentSession) return '';
-  
-      const baseURL = typeof window !== 'undefined' ? window.location.origin : '';
-      return `${baseURL}/session/${currentSession.sessionId}`;
-    };
+  // ✅ Generar URL única con sessionId, userId y userName
+  const generateQRValue = () => {
+    if (!currentSession) return '';
+    const baseURL = typeof window !== 'undefined' ? window.location.origin : '';
+    return `${baseURL}/session/${currentSession.sessionId}?userId=${currentUserId}&userName=${encodeURIComponent(currentUserName)}`;
+  };
+
 
   const copyToClipboard = async () => {
     try {
@@ -851,7 +974,9 @@ const fetchSplitsForSession = async (sessionId: string) => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      <SimulationBanner />
+      <div className="p-4"></div>
       {/* Real-time Notifications Component */}
       <RealtimeNotifications
         isConnected={isConnected}

@@ -11,6 +11,14 @@ require('dotenv').config();
 const app = express();
 const server = createServer(app);
 const prisma = new PrismaClient();
+const parseAssignees = (assigneesString) => {
+  try {
+    return JSON.parse(assigneesString || '[]');
+  } catch {
+    return [];
+  }
+};
+
 const io = new Server(server, {
   cors: {
     origin: ["http://localhost:3001", "http://localhost:3000"],
@@ -18,6 +26,8 @@ const io = new Server(server, {
     credentials: true
   }
 });
+
+
 
 // 🔄 REAL-TIME: Store para sesiones activas y usuarios conectados
 const activeSessions = new Map(); // sessionId -> { users: Set, lastActivity: Date }
@@ -219,9 +229,19 @@ const broadcastSessionUpdate = async (sessionId, updateType, data) => {
     if (!session) return;
 
     // Calcular splits automáticamente si hay participantes
+    // Parsear assignees para todas las sesiones
+    const sessionWithParsedItems = {
+      ...session,
+      items: session.items.map(item => ({
+        ...item,
+        assignees: parseAssignees(item.assignees)
+      }))
+    };
+
+    // Calcular splits automáticamente si hay participantes
     let splits = null;
-    if (session.participants.length > 0) {
-      splits = SplitEngine.calculateSplits(session, SplitMethods.PROPORTIONAL);
+    if (sessionWithParsedItems.participants.length > 0) {
+      splits = SplitEngine.calculateSplits(sessionWithParsedItems, SplitMethods.PROPORTIONAL);
     }
 
     const updatePayload = {
@@ -385,8 +405,17 @@ app.get('/api/sessions/:sessionId', async (req, res) => {
     // 🔄 REAL-TIME: Incluir info de usuarios conectados
     const connectedUsers = activeSessions.get(req.params.sessionId)?.users.size || 0;
     
-    res.json({
+    // Parsear assignees antes de devolver
+    const sessionWithParsedAssignees = {
       ...session,
+      items: session.items.map(item => ({
+        ...item,
+        assignees: parseAssignees(item.assignees)
+      }))
+    };
+    
+    res.json({
+      ...sessionWithParsedAssignees,
       realtime: {
         connectedUsers,
         isActive: connectedUsers > 0
@@ -409,7 +438,9 @@ app.post('/api/sessions/:sessionId/join', async (req, res) => {
         sessionId: req.params.sessionId,
         userId: req.body.user_id || 'user_' + Date.now(),
         name: req.body.name || null,
-        walletAddress: req.body.wallet_address || null
+        walletAddress: req.body.wallet_address || null,
+        addedBy: req.body.added_by || req.body.user_id,
+        isOperator: req.body.is_operator || false
       }
     });
 
@@ -464,6 +495,8 @@ app.post('/api/sessions/:sessionId/items', async (req, res) => {
       });
     }
 
+    const assigneesJson = JSON.stringify(req.body.assignees || []);
+
     const item = await prisma.item.create({
       data: {
         sessionId: req.params.sessionId,
@@ -471,7 +504,7 @@ app.post('/api/sessions/:sessionId/items', async (req, res) => {
         amount,
         tax,
         tip,
-        assignees: req.body.assignees || []
+        assignees: assigneesJson
       }
     });
 
@@ -576,7 +609,7 @@ app.put('/api/sessions/:sessionId/items/:itemId/assignees', async (req, res) => 
         id: itemId  // Usar itemId como string directamente
       },
       data: {
-        assignees: assignees || []
+        assignees: JSON.stringify(assignees || [])
       }
     });
 
@@ -685,7 +718,16 @@ app.get('/api/sessions/:sessionId/splits', async (req, res) => {
       return res.status(404).json({ error: 'Session not found' });
     }
 
-    const splits = SplitEngine.calculateSplits(session, SplitMethods.PROPORTIONAL);
+    // ✅ Parsear assignees de cada item antes de pasar al SplitEngine
+    const sessionWithParsedItems = {
+      ...session,
+      items: session.items.map(item => ({
+        ...item,
+        assignees: parseAssignees(item.assignees)
+      }))
+    };
+
+    const splits = SplitEngine.calculateSplits(sessionWithParsedItems, SplitMethods.PROPORTIONAL);
 
     res.json({
       success: true,
@@ -697,6 +739,7 @@ app.get('/api/sessions/:sessionId/splits', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
 
 // 🔄 NUEVO: Endpoint para obtener usuarios conectados en tiempo real
 app.get('/api/sessions/:sessionId/connected-users', (req, res) => {
