@@ -92,14 +92,13 @@ export const useWallet = (): UseWalletReturn => {
         accounts: accounts.length
       });
 
-      setWalletState(prev => ({
-        ...prev,
+      setWalletState({
         isConnected: true,
         isConnecting: false,
         address: address,
         walletName: (starknet as any).name || 'Starknet Wallet',
         error: null,
-      }));
+      });
 
       // Guardar en localStorage para persistencia
       if (typeof localStorage !== 'undefined') {
@@ -107,6 +106,11 @@ export const useWallet = (): UseWalletReturn => {
         localStorage.setItem('qrsplit_wallet_address', address);
         localStorage.setItem('qrsplit_wallet_name', (starknet as any).name || 'Starknet Wallet');
       }
+
+      // Disparar evento personalizado para notificar a otros componentes
+      window.dispatchEvent(new CustomEvent('walletConnected', { 
+        detail: { address, walletName: (starknet as any).name || 'Starknet Wallet' } 
+      }));
 
     } catch (error) {
       console.error('❌ [WALLET] Error conectando:', error);
@@ -154,6 +158,9 @@ export const useWallet = (): UseWalletReturn => {
         localStorage.removeItem('qrsplit_wallet_name');
       }
 
+      // Disparar evento personalizado
+      window.dispatchEvent(new Event('walletDisconnected'));
+
       console.log('✅ [WALLET] Desconectada');
 
     } catch (error) {
@@ -165,7 +172,7 @@ export const useWallet = (): UseWalletReturn => {
     }
   }, []);
 
-  // Auto-reconexión al cargar la página
+  // Auto-reconexión al cargar la página + escuchar eventos
   useEffect(() => {
     const autoReconnect = async () => {
       if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
@@ -178,20 +185,14 @@ export const useWallet = (): UseWalletReturn => {
         console.log('🔄 [WALLET] Intentando reconexión automática...');
         
         try {
-          // Importar get-starknet
           const starknetLib = await import('get-starknet');
           const connect = starknetLib.connect;
 
-          // Intentar conectar silenciosamente
-          const starknet = await connect({ 
-            modalMode: 'neverAsk'
-          });
+          const starknet = await connect({ modalMode: 'neverAsk' });
 
           if (starknet) {
-            // Verificar si la dirección coincide
             let currentAddress: string | null = null;
             
-            // Obtener dirección de múltiples formas posibles
             if ((starknet as any).selectedAddress) {
               currentAddress = (starknet as any).selectedAddress;
             } else if ((starknet as any).account?.address) {
@@ -209,14 +210,13 @@ export const useWallet = (): UseWalletReturn => {
 
               console.log('✅ [WALLET] Reconexión automática exitosa');
             } else {
-              // Si no coincide la dirección, limpiar localStorage
               localStorage.removeItem('qrsplit_wallet_connected');
               localStorage.removeItem('qrsplit_wallet_address');
               localStorage.removeItem('qrsplit_wallet_name');
             }
           }
         } catch (error) {
-          console.log('⚠️ [WALLET] Reconexión automática falló, limpiando localStorage');
+          console.log('⚠️ [WALLET] Reconexión automática falló');
           localStorage.removeItem('qrsplit_wallet_connected');
           localStorage.removeItem('qrsplit_wallet_address');
           localStorage.removeItem('qrsplit_wallet_name');
@@ -224,62 +224,39 @@ export const useWallet = (): UseWalletReturn => {
       }
     };
 
-    // Ejecutar después de que el componente se monte
+    // Escuchar eventos de wallet
+    const handleWalletConnected = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setWalletState({
+        isConnected: true,
+        isConnecting: false,
+        address: detail.address,
+        walletName: detail.walletName,
+        error: null,
+      });
+    };
+
+    const handleWalletDisconnected = () => {
+      setWalletState({
+        isConnected: false,
+        isConnecting: false,
+        address: null,
+        walletName: null,
+        error: null,
+      });
+    };
+
+    window.addEventListener('walletConnected', handleWalletConnected);
+    window.addEventListener('walletDisconnected', handleWalletDisconnected);
+
     const timeoutId = setTimeout(autoReconnect, 1000);
-    return () => clearTimeout(timeoutId);
-  }, []);
-
-  // Escuchar cambios de cuenta en la wallet
-  useEffect(() => {
-    let starknetInstance: any = null;
-
-    const handleAccountChange = (accounts: string[]) => {
-      console.log('🔄 [WALLET] Cuenta cambiada:', accounts);
-      
-      if (walletState.isConnected) {
-        if (accounts.length > 0) {
-          // Actualizar con nueva cuenta
-          setWalletState(prev => ({
-            ...prev,
-            address: accounts[0],
-          }));
-          
-          // Actualizar localStorage
-          if (typeof localStorage !== 'undefined') {
-            localStorage.setItem('qrsplit_wallet_address', accounts[0]);
-          }
-        } else {
-          // Usuario desconectó desde la wallet
-          disconnectWallet();
-        }
-      }
-    };
-
-    const setupEventListeners = async () => {
-      try {
-        const starknetLib = await import('get-starknet');
-        const connect = starknetLib.connect;
-        
-        starknetInstance = await connect({ modalMode: 'neverAsk' });
-        if (starknetInstance && typeof (starknetInstance as any).on === 'function') {
-          (starknetInstance as any).on('accountsChanged', handleAccountChange);
-        }
-      } catch (error) {
-        // Ignorar errores silenciosos de conexión
-        console.log('No se pudo configurar listeners de wallet');
-      }
-    };
-
-    if (typeof window !== 'undefined') {
-      setupEventListeners();
-    }
-
+    
     return () => {
-      if (starknetInstance && typeof (starknetInstance as any).off === 'function') {
-        (starknetInstance as any).off('accountsChanged', handleAccountChange);
-      }
+      clearTimeout(timeoutId);
+      window.removeEventListener('walletConnected', handleWalletConnected);
+      window.removeEventListener('walletDisconnected', handleWalletDisconnected);
     };
-  }, [walletState.isConnected, disconnectWallet]);
+  }, []);
 
   return {
     ...walletState,
