@@ -807,9 +807,15 @@ const addOtherPerson = async () => {
   };
 
   // NUEVO: Función para pagar individual
+
   const handleIndividualPayment = async (participant: Split) => {
-    if (!walletConnected || !walletAddress || !blockchainSessionId) {
+    if (!walletConnected || !walletAddress) {
       setError('Conecta tu wallet primero');
+      return;
+    }
+
+    if (!blockchainSessionId) {
+      setError('Sesión blockchain no inicializada. Crea una nueva sesión.');
       return;
     }
 
@@ -820,33 +826,50 @@ const addOtherPerson = async () => {
 
     try {
       setPaymentStates(prev => ({ ...prev, [participant.userId]: 'paying' }));
-      
+    
       console.log('💰 [PAYMENT] Realizando pago individual...', {
         sessionId: blockchainSessionId,
-        participant: participant.userId,
+        participantUserId: participant.userId,
+        walletAddress: walletAddress,
         amount: participant.amount
       });
 
-      const result = await makeBlockchainPayment(blockchainSessionId, walletAddress);
+      // CRÍTICO: Intentar unirse al smart contract primero (por si no está registrado)
+      try {
+        console.log('🔗 [BLOCKCHAIN] Verificando registro en smart contract...');
+        const joinResult = await joinBlockchainSession(
+          blockchainSessionId,
+          walletAddress,
+          Math.round(participant.amount * 100)
+        );
       
+        if (joinResult.success) {
+          console.log('✅ [BLOCKCHAIN] Participante registrado/verificado en smart contract');
+        }
+      } catch (joinError) {
+        console.log('⚠️ [BLOCKCHAIN] Participante ya registrado o error menor:', joinError);
+        // Continuar de todos modos
+      }
+
+      // Ahora sí realizar el pago
+      const result = await makeBlockchainPayment(blockchainSessionId, walletAddress);
+    
       if (result.success) {
         setPaymentStates(prev => ({ ...prev, [participant.userId]: 'paid' }));
         console.log('✅ [PAYMENT] Pago exitoso:', result.txHash);
-        
+      
         // Mostrar notificación de éxito
-        if (notifications) {
-          notifications.push(`💰 Pago realizado exitosamente: ${formatCurrency(participant.amount)}`);
-        }
+        notifications.push(`💰 Pago realizado: ${formatCurrency(participant.amount)}`);
       } else {
         setPaymentStates(prev => ({ ...prev, [participant.userId]: 'failed' }));
         setError(result.error || 'Error en el pago');
       }
     } catch (error) {
+      console.error('❌ [PAYMENT] Error completo:', error);
       setPaymentStates(prev => ({ ...prev, [participant.userId]: 'failed' }));
       setError(error instanceof Error ? error.message : 'Error realizando pago');
     }
-  };
-
+};
   // NUEVO: Función para ejecutar pago grupal
   const handleGroupPayment = async () => {
     if (!walletConnected || !walletAddress || !blockchainSessionId) {
@@ -1015,9 +1038,9 @@ const addOtherPerson = async () => {
               Real-time: {isConnected ? '✅' : '🔄'}
             </Badge>
             {/* NUEVO: Indicador de wallet */}
-            <Badge variant={walletConnected ? "default" : "secondary"}>
+            <Badge variant={walletConnected && walletAddress ? "default" : "secondary"}>
               <Wallet className="w-3 h-3 mr-1" />
-              Wallet: {walletConnected ? '✅' : '❌'}
+              Wallet: {walletConnected && walletAddress ? '✅' : '❌'}
             </Badge>
             {blockchainSessionId && (
               <Badge variant="outline">

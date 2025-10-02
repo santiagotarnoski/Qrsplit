@@ -476,6 +476,47 @@ app.post('/api/sessions/:sessionId/join', async (req, res) => {
   }
 });
 
+// 🔄 NUEVO: Actualizar wallet de un participante ya unido
+app.put('/api/sessions/:sessionId/participants/:userId/wallet', async (req, res) => {
+  try {
+    const { sessionId, userId } = req.params;
+    const { walletAddress } = req.body;
+
+    if (!walletAddress) {
+      return res.status(400).json({ error: "Wallet address requerido" });
+    }
+
+    // Buscar participante en la sesión
+    const participant = await prisma.participant.findFirst({
+      where: { sessionId, userId }
+    });
+
+    if (!participant) {
+      return res.status(404).json({ error: "Participant not found" });
+    }
+
+    // Actualizar wallet
+    const updated = await prisma.participant.update({
+      where: { id: participant.id },
+      data: { walletAddress }
+    });
+
+    console.log(`🔗 [WALLET UPDATED] ${userId} → ${walletAddress}`);
+
+    // Broadcast en tiempo real
+    await broadcastSessionUpdate(sessionId, 'wallet-updated', {
+      participant: updated,
+      message: `${updated.name || updated.userId} conectó su wallet`
+    });
+
+    res.json({ success: true, participant: updated });
+  } catch (error) {
+    console.error("🔥 [ERROR /update-wallet]", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 // 🔄 MEJORADO: Agregar items con real-time broadcast
 app.post('/api/sessions/:sessionId/items', async (req, res) => {
   try {

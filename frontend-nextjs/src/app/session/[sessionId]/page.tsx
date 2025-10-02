@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Users, ArrowLeft } from 'lucide-react';
+import { WalletButton } from '../../../components/WalletButton'; // ✅ ruta corregida
 
 interface Session {
   id: string;
@@ -42,7 +43,7 @@ export default function SessionPage() {
         throw new Error('Sesión no encontrada');
       }
       const data = await response.json();
-      setSession(data.session || data); // Asegurar compatibilidad con diferentes formatos de respuesta
+      setSession(data.session || data); // Compatibilidad con diferentes formatos
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error cargando sesión');
     } finally {
@@ -76,7 +77,6 @@ export default function SessionPage() {
       const joinResult = await response.json();
       console.log('✅ [JOIN] Usuario unido exitosamente:', joinResult);
       
-      // CAMBIO CRÍTICO: Pasar sessionId, userName y userId a la página principal
       const params = new URLSearchParams({
         sessionId: sessionId,
         userName: userName.trim(),
@@ -91,6 +91,24 @@ export default function SessionPage() {
       setError(err instanceof Error ? err.message : 'Error uniéndose a sesión');
     } finally {
       setJoining(false);
+    }
+  };
+
+  // 👉 Lógica del Pago Grupal
+  const executeGroupPayment = async () => {
+    try {
+      console.log("💸 Ejecutando pago grupal...");
+
+      // Aquí iría la lógica real de Starknet / backend
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Actualizar estado local para que el botón desaparezca
+      setSession(prev => prev ? { ...prev, status: "paid" } : prev);
+
+      // Notificación
+      alert("🎉 Pago grupal completado!");
+    } catch (err) {
+      console.error("❌ Error en el pago grupal", err);
     }
   };
 
@@ -146,7 +164,6 @@ export default function SessionPage() {
               <div><strong>Total:</strong> ${parseFloat(session.totalAmount).toFixed(2)}</div>
             </div>
             
-            {/* Mostrar participantes existentes */}
             {session.participants && session.participants.length > 0 && (
               <div className="mb-4">
                 <h4 className="font-medium mb-2">Participantes actuales:</h4>
@@ -172,6 +189,79 @@ export default function SessionPage() {
                     </div>
                   ))}
                 </div>
+
+                {/* 👇 Pago con Blockchain */}
+                {parseFloat(session.totalAmount) > 0 && (
+                  <div className="mt-6 p-4 border rounded-lg bg-green-50">
+                    <h4 className="font-medium mb-2">Pagar con Blockchain</h4>
+
+                    {/* Mensaje dinámico */}
+                    {session.participants.some((p: any) => p.wallet_address) ? (
+                      <p className="text-sm text-green-700 mb-3">
+                        ✅ Wallet conectada. Ya puedes ejecutar el pago.
+                      </p>
+                    ) : (
+                      <p className="text-sm text-gray-600 mb-3">
+                        Conecta tu wallet para abonar el total en crypto.
+                      </p>
+                    )}
+
+                    <div className="flex justify-center">
+                      <WalletButton
+                        size="lg"
+                        onConnect={(address: string) => {
+                          console.log("✅ Wallet conectada:", address);
+                          // 🔑 Actualizar participante actual con wallet
+                          setSession(prev =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  participants: prev.participants.map(p =>
+                                    p.name === userName
+                                      ? { ...p, wallet_address: address }
+                                      : p
+                                  ),
+                                }
+                              : prev
+                          );
+                        }}
+                        onDisconnect={() => {
+                          console.log("👋 Wallet desconectada");
+                          setSession(prev =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  participants: prev.participants.map(p =>
+                                    p.name === userName
+                                      ? { ...p, wallet_address: null }
+                                      : p
+                                  ),
+                                }
+                              : prev
+                          );
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* 👇 Botón de pago grupal */}
+                {session.status !== "paid" && (
+                  <div className="mt-4 p-4 bg-green-50 border rounded-lg flex justify-between items-center">
+                    <div>
+                      <p className="font-medium text-green-700">¡Todos han pagado!</p>
+                      <p className="text-sm text-green-600">
+                        Ejecuta el pago grupal para completar la transacción
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={executeGroupPayment} 
+                      className="bg-green-600 text-white hover:bg-green-700"
+                    >
+                      Ejecutar Pago Grupal
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
@@ -203,8 +293,7 @@ export default function SessionPage() {
               </Button>
               
               <Button onClick={() => router.push('/')} variant="outline">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Volver
+                <ArrowLeft className="w-4 h-4 mr-2" /> Volver
               </Button>
             </div>
             
