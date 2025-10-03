@@ -3,30 +3,24 @@ generator client {
 }
 
 datasource db {
-<<<<<<< HEAD
-  provider = "sqlite"
-  url      = "file:./dev.db"
-=======
   provider = "postgresql"
   url      = env("DATABASE_URL")
->>>>>>> 51a0351 (Actualizacion de carpeta Qrsplit con arreglo en la wallet)
 }
 
-
 model Session {
-  id               String   @id @default(cuid())
-  sessionId        String   @unique @map("session_id")
-  merchantId       String   @map("merchant_id")
-  status           String   @default("active")
-  totalAmount      Float    @default(0) @map("total_amount")
-  participantsCount Int     @default(0) @map("participants_count")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
-  timeoutAt        DateTime? @map("timeout_at")
+  id                String   @id @default(cuid())
+  sessionId         String   @unique @map("session_id")
+  merchantId        String   @map("merchant_id")
+  status            String   @default("active")
+  totalAmount       Float    @default(0) @map("total_amount")
+  participantsCount Int      @default(0) @map("participants_count")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  timeoutAt         DateTime? @map("timeout_at")
 
-  participants     Participant[]
-  items            Item[]
-  payments         Payment[]
+  participants      Participant[]
+  items             Item[]
+  payments          Payment[]
 
   @@map("sessions")
 }
@@ -38,7 +32,6 @@ model Participant {
   name          String?  @map("name")
   walletAddress String?  @map("wallet_address")
   joinedAt      DateTime @default(now()) @map("joined_at")
-  
   addedBy       String?  @map("added_by")
   isOperator    Boolean  @default(false) @map("is_operator")
 
@@ -63,18 +56,18 @@ model Item {
 }
 
 model Payment {
-  id          String   @id @default(cuid())
-  sessionId   String   @map("session_id")
-  fromAddress String   @map("from_address")
-  toAddress   String   @map("to_address")
-  amount      Float
-  tokenAddress String  @map("token_address")
-  txHash      String?  @map("tx_hash")
-  status      String   @default("pending")
-  createdAt   DateTime @default(now()) @map("created_at")
-  confirmedAt DateTime? @map("confirmed_at")
+  id           String   @id @default(cuid())
+  sessionId    String   @map("session_id")
+  fromAddress  String   @map("from_address")
+  toAddress    String   @map("to_address")
+  amount       Float
+  tokenAddress String   @map("token_address")
+  txHash       String?  @map("tx_hash")
+  status       String   @default("pending")
+  createdAt    DateTime @default(now()) @map("created_at")
+  confirmedAt  DateTime? @map("confirmed_at")
 
-  session     Session  @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+  session      Session  @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
 
   @@map("payments")
 }
