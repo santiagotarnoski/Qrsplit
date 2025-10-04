@@ -1,1653 +1,388 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { Button } from '@app/components/ui/button';
-import { Input } from '@app/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@app/components/ui/card';
-import { Badge } from '@app/components/ui/badge';
-import { QrCode, Users, Plus, DollarSign, Calculator, TrendingUp, User, Check, X, Edit, Share2, Copy, Wifi, WifiOff, Bell, Wallet, Link, CheckCircle, Clock, AlertCircle } from 'lucide-react';
-// Hook de Socket.io (importar desde tu archivo)
-import { useSocket } from '../hooks/useSocket';
-// NUEVO: Imports de wallet y blockchain
-import { WalletButton } from '../components/WalletButton';
-import { useWallet } from '../hooks/useWallet';
-import { useContract } from '../hooks/useContract';
-import { useSearchParams } from 'next/navigation';
-import { SimulationBanner } from '../components/SimulationBanner';
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { QrCode, Zap, Lock, Users, ArrowRight, CheckCircle, Wallet, TrendingUp } from 'lucide-react';
+import { Button } from './components/ui/button';
+import { Card, CardContent } from './components/ui/card';
+import { Badge } from './components/ui/badge';
 
-
-// Componente de notificaciones real-time simple
-const RealtimeNotifications = ({ isConnected, connectedUsers, notifications, onRemoveNotification, onClearNotifications }: any) => {
-  const [showNotifications, setShowNotifications] = useState(false);
+export default function LandingPage() {
+  const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    if (notifications.length > 0) {
-      setShowNotifications(true);
-    }
-  }, [notifications.length]);
-
-  return (
-    <div className="fixed top-4 right-4 z-50 space-y-2">
-      {/* Status Indicator */}
-      <div className="flex items-center justify-end space-x-2">
-        <div className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium ${
-          isConnected 
-            ? 'bg-green-100 text-green-800' 
-            : 'bg-red-100 text-red-800'
-        }`}>
-          {isConnected ? (
-            <>
-              <Wifi className="w-3 h-3" />
-              <span>Real-time ON</span>
-            </>
-          ) : (
-            <>
-              <WifiOff className="w-3 h-3" />
-              <span>Conectando...</span>
-            </>
-          )}
-        </div>
-
-        {/* Connected Users Counter */}
-        {isConnected && connectedUsers.length > 0 && (
-          <div className="flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-            <Users className="w-3 h-3" />
-            <span>{connectedUsers.length} conectados</span>
-          </div>
-        )}
-
-        {/* Notifications Toggle */}
-        {notifications.length > 0 && (
-          <button
-            onClick={() => setShowNotifications(!showNotifications)}
-            className="relative p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors"
-          >
-            <Bell className="w-4 h-4" />
-            {notifications.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                {notifications.length}
-              </span>
-            )}
-          </button>
-        )}
-      </div>
-
-      {/* Notifications Panel */}
-      {showNotifications && notifications.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-4 max-w-sm">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-medium text-gray-900 flex items-center">
-              <Bell className="w-4 h-4 mr-2" />
-              Actualizaciones
-            </h3>
-            <div className="flex space-x-1">
-              <button
-                onClick={onClearNotifications}
-                className="text-gray-400 hover:text-gray-600 text-sm"
-              >
-                Limpiar
-              </button>
-              <button
-                onClick={() => setShowNotifications(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-2 max-h-60 overflow-y-auto">
-            {notifications.map((notification: string, index: number) => (
-              <div
-                key={index}
-                className="flex items-start justify-between p-2 bg-blue-50 rounded text-sm"
-              >
-                <div className="flex items-start space-x-2">
-                  <Check className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                  <span className="text-gray-700">{notification}</span>
-                </div>
-                <button
-                  onClick={() => onRemoveNotification(index)}
-                  className="text-gray-400 hover:text-gray-600 ml-2"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Connected Users Panel */}
-      {isConnected && connectedUsers.length > 0 && showNotifications && (
-        <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-4 max-w-sm">
-          <h3 className="font-medium text-gray-900 flex items-center mb-3">
-            <Users className="w-4 h-4 mr-2" />
-            Usuarios conectados ({connectedUsers.length})
-          </h3>
-          <div className="space-y-2">
-            {connectedUsers.map((user: any, index: number) => (
-              <div
-                key={index}
-                className="flex items-center justify-between text-sm"
-              >
-                <div className="flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span className="font-medium">{user.userName}</span>
-                </div>
-                <span className="text-gray-500 text-xs">
-                  {user.connectedAt ? new Date(user.connectedAt).toLocaleTimeString() : 'Ahora'}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// Componente QR personalizado que funciona sin errores
-const CustomQRCode: React.FC<{ value: string; size?: number }> = ({ 
-  value, 
-  size = 180 
-}) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const generateQR = async () => {
-      if (canvasRef.current && value) {
-        try {
-          const QRCode = (await import('qrcode')).default;
-          await QRCode.toCanvas(canvasRef.current, value, {
-            width: size,
-            margin: 1,
-            color: {
-              dark: '#1e40af',
-              light: '#ffffff'
-            },
-            errorCorrectionLevel: 'M'
-          });
-        } catch (err) {
-          console.error('Error generating QR code:', err);
-          if (canvasRef.current) {
-            const ctx = canvasRef.current.getContext('2d');
-            if (ctx) {
-              canvasRef.current.width = size;
-              canvasRef.current.height = size;
-              ctx.fillStyle = '#f3f4f6';
-              ctx.fillRect(0, 0, size, size);
-              ctx.fillStyle = '#6b7280';
-              ctx.font = '12px Arial';
-              ctx.textAlign = 'center';
-              ctx.fillText('QR Code', size/2, size/2);
-            }
-          }
-        }
-      }
-    };
-
-    generateQR();
-  }, [value, size]);
-
-  return (
-    <canvas 
-      ref={canvasRef} 
-      className="rounded-lg"
-      style={{ maxWidth: '100%', height: 'auto' }}
-    />
-  );
-};
-
-interface Participant {
-  id: number;
-  userId: string;
-  name?: string;
-  walletAddress?: string;
-  addedBy?: string;        // NUEVO
-  isOperator?: boolean;    // NUEVO
-}
-
-interface Item {
-  id: number;
-  name: string;
-  amount: number;
-  tax?: number;
-  tip?: number;
-  assignees?: number[];
-}
-
-interface Session {
-  id: string;
-  sessionId: string;
-  merchantId: string;
-  status: string;
-  totalAmount: string;
-  participantsCount: number;
-  createdAt: string;
-  participants: Participant[];
-  items: Item[];
-  payments: any[];
-}
-
-interface Split {
-  participantId: number;
-  userId: string;
-  name: string;
-  amount: number;
-  percentage: number;
-  items: any[];
-  method: string;
-}
-
-interface SplitData {
-  method: string;
-  totalAmount: number;
-  calculatedTotal: number;
-  difference: number;
-  participants: Split[];
-  summary: {
-    participantCount: number;
-    averageAmount: number;
-    highestAmount: number;
-    lowestAmount: number;
-  };
-}
-
-export default function QRSplitApp() {
-  const [currentSession, setCurrentSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [apiStatus, setApiStatus] = useState<string>('checking...');
-  const [merchantId, setMerchantId] = useState('demo_merchant');
-  const [itemName, setItemName] = useState('');
-  const [itemAmount, setItemAmount] = useState('');
-  const [selectedParticipants, setSelectedParticipants] = useState<number[]>([]);
-  const [splits, setSplits] = useState<SplitData | null>(null);
-  const [splitMethod, setSplitMethod] = useState('proportional');
-  const [editingItem, setEditingItem] = useState<number | null>(null);
-  const [showQRCode, setShowQRCode] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
-  const [currentUserId] = useState(`user_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`);
-  const [currentUserName, setCurrentUserName] = useState('');
-
-  // Socket.io integration
-  const {
-    isConnected,
-    connectedUsers,
-    lastUpdate,
-    notifications,
-    joinSession: joinSocketSession,
-    leaveSession: leaveSocketSession,
-    sendTyping,
-    stopTyping,
-    clearNotifications,
-    removeNotification
-  } = useSocket();
-
-  // NUEVO: Blockchain integration
-  const { isConnected: walletConnected, address: walletAddress, formatAddress } = useWallet();
-  console.log('🔍 [WALLET DEBUG]', { walletConnected, walletAddress, formatAddress });
-  const {
-    createSession: createBlockchainSession,
-    joinSession: joinBlockchainSession,
-    makePayment: makeBlockchainPayment,
-    executeGroupPayment,
-    getSession: getBlockchainSession,
-    getPaymentStatus,
-    isLoading: contractLoading,
-    error: contractError,
-    clearError: clearContractError
-  } = useContract();
-
-  // NUEVO: Estados para blockchain
-  const [blockchainSessionId, setBlockchainSessionId] = useState<string | null>(null);
-  const [paymentStates, setPaymentStates] = useState<{ [userId: string]: 'pending' | 'paying' | 'paid' | 'failed' }>({});
-  const [showGroupPayButton, setShowGroupPayButton] = useState(false);
-
-  // Auto-cargar sesión desde URL parameters
-const searchParams = useSearchParams();
-
-useEffect(() => {
-  const sessionIdFromUrl = searchParams.get('sessionId');
-  const userNameFromUrl = searchParams.get('userName');
-  const userIdFromUrl = searchParams.get('userId');
-  const justJoined = searchParams.get('joined');
-  
-  console.log('🔍 [URL CHECK]', { sessionIdFromUrl, userNameFromUrl, justJoined, hasCurrentSession: !!currentSession });
-  
-  if (sessionIdFromUrl && !currentSession) {
-    console.log('📍 [URL] Cargando sesión desde URL:', sessionIdFromUrl);
-    loadSessionFromUrl(sessionIdFromUrl);
-    
-    if (userNameFromUrl && userIdFromUrl) {
-      setCurrentUserName(userNameFromUrl);
-    }
-  }
-}, [searchParams, currentSession]);
-
-const loadSessionFromUrl = async (sessionId: string) => {
-  setLoading(true);
-  setError(null);
-  
-  try {
-    console.log('🔄 [LOAD] Cargando sesión desde URL:', sessionId);
-    
-    const response = await fetch(`http://localhost:3000/api/sessions/${sessionId}`);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    console.log('✅ [LOAD] Respuesta del backend:', data);
-    
-    // Manejar diferentes formatos de respuesta del backend
-    const session = data.session || data;
-    setCurrentSession(session);
-    
-    // Cargar splits si hay participantes
-    if (session.participants?.length > 0) {
-      console.log('📊 [SPLITS] Cargando splits...');
-      await fetchSplitsForSession(sessionId);
-    }
-    
-  } catch (error) {
-    console.error('❌ [LOAD] Error cargando sesión desde URL:', error);
-    setError('Error cargando sesión desde el enlace');
-  } finally {
-    setLoading(false);
-  }
-};
-
-const fetchSplitsForSession = async (sessionId: string) => {
-  try {
-    const response = await fetch(`http://localhost:3000/api/sessions/${sessionId}/splits`);
-    if (response.ok) {
-      const data = await response.json();
-      console.log('✅ [SPLITS] Splits cargados:', data);
-      setSplits(data.splits);
-    }
-  } catch (error) {
-    console.error('❌ [SPLITS] Error cargando splits:', error);
-  }
-};
-
-  useEffect(() => {
-    checkAPIStatus();
+    setIsVisible(true);
   }, []);
 
-  useEffect(() => {
-    if (currentSession && currentSession.participants.length > 0) {
-      fetchSplits();
-    }
-  }, [currentSession?.totalAmount, currentSession?.participants.length]);
-
-  // Real-time socket updates handler
-  useEffect(() => {
-    if (!lastUpdate || !currentSession) return;
-
-    console.log('🔄 [REALTIME] Actualizando desde socket:', lastUpdate);
-
-    if (lastUpdate.session && lastUpdate.session.sessionId === currentSession.sessionId) {
-      setCurrentSession(lastUpdate.session);
-      
-      if (lastUpdate.splits) {
-        setSplits(lastUpdate.splits);
-      }
-    }
-  }, [lastUpdate, currentSession?.sessionId]);
-
-  // Auto-join socket session cuando se crea o carga una sesión
-  useEffect(() => {
-    if (currentSession && isConnected && currentUserName) {
-      console.log(`🔌 [SOCKET] Auto-joining session: ${currentSession.sessionId}`);
-      joinSocketSession(currentSession.sessionId, currentUserId, currentUserName);
-    }
-
-    return () => {
-      if (currentSession) {
-        leaveSocketSession();
-      }
-    };
-  }, [currentSession?.sessionId, isConnected, currentUserName, joinSocketSession, leaveSocketSession, currentUserId]);
-
-  // NUEVO: Verificar estado de pagos blockchain
-  useEffect(() => {
-    const checkPaymentStatus = async () => {
-      if (blockchainSessionId && splits) {
-        try {
-          const status = await getPaymentStatus(blockchainSessionId);
-          
-          // Verificar si todos han pagado
-          if (status.is_fully_paid && status.total_participants > 0) {
-            setShowGroupPayButton(true);
-          }
-        } catch (error) {
-          console.error('Error checking payment status:', error);
-        }
-      }
-    };
-
-    const interval = setInterval(checkPaymentStatus, 5000);
-    return () => clearInterval(interval);
-  }, [blockchainSessionId, splits, getPaymentStatus]);
-
-  const checkAPIStatus = async () => {
-    try {
-      const response = await fetch('http://localhost:3000/health');
-      const data = await response.json();
-      setApiStatus('connected ✅');
-      console.log('Backend status:', data);
-    } catch (err) {
-      setApiStatus('disconnected ❌');
-      setError('Backend no disponible. Asegúrate de que esté corriendo en puerto 3000');
-    }
-  };
-
-  const createSession = async () => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const response = await fetch('http://localhost:3000/api/sessions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ merchant_id: merchantId }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setCurrentSession(data.session);
-      setShowQRCode(true);
-      
-      // Prompt for user name and join socket session
-      const userName = prompt('Ingresa tu nombre para la sesión:') || `Usuario ${currentUserId.slice(-5)}`;
-      setCurrentUserName(userName);
-
-      // NUEVO: Crear sesión en blockchain si wallet está conectada
-      if (walletConnected && walletAddress) {
-        console.log('🔗 [BLOCKCHAIN] Creando sesión en smart contract...');
-        const blockchainResult = await createBlockchainSession(
-          data.session.sessionId,
-          merchantId,
-          walletAddress,
-          parseFloat(data.session.totalAmount) || 0
-        );
-        
-        if (blockchainResult.success) {
-          setBlockchainSessionId(data.session.sessionId);
-          console.log('✅ [BLOCKCHAIN] Sesión creada:', blockchainResult.txHash);
-        } else {
-          console.error('❌ [BLOCKCHAIN] Error creando sesión:', blockchainResult.error);
-        }
-      }
-      
-      console.log('Session created:', data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error creando sesión');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const addItem = async () => {
-    if (!currentSession || !itemName || !itemAmount) return;
-    
-    setLoading(true);
-    if (sendTyping) sendTyping('adding-item');
-    
-    try {
-      const assignees = selectedParticipants.length > 0 
-        ? selectedParticipants 
-        : currentSession.participants.map(p => p.id);
-
-      const response = await fetch(`http://localhost:3000/api/sessions/${currentSession.sessionId}/items`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: itemName,
-          amount: itemAmount,
-          tax: 0,
-          tip: 0,
-          assignees: assignees
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      
-      // Solo actualizar si no viene del socket (evitar duplicados)
-      if (!lastUpdate || lastUpdate.type !== 'item-added') {
-        setCurrentSession(data.session);
-        if (data.splits) {
-          setSplits(data.splits);
-        }
-      }
-      
-      // Limpiar formulario
-      setItemName('');
-      setItemAmount('');
-      setSelectedParticipants([]);
-      
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error agregando item');
-    } finally {
-      setLoading(false);
-      if (stopTyping) stopTyping();
-    }
-  };
-
-  const updateItemAssignees = async (itemId: number, newAssignees: number[]) => {
-    if (!currentSession) return;
-    
-    // Guardar estado original ANTES de hacer cambios optimistas (fuera del try)
-    const originalSession = { ...currentSession };
-    const previousAssignees = currentSession.items.find(item => item.id === itemId)?.assignees || [];
-    
-    try {
-      
-      // Mostrar cambio optimistamente
-      const updatedItems = currentSession.items.map(item => 
-        item.id === itemId ? { ...item, assignees: newAssignees } : item
-      );
-      
-      setCurrentSession({
-        ...currentSession,
-        items: updatedItems
-      });
-
-      console.log(`🔄 [UPDATE ASSIGNEES] Enviando request para item ${itemId}`);
-      console.log(`👥 [ASSIGNEES] Previous: [${previousAssignees}] → New: [${newAssignees}]`);
-
-      // Enviar al backend
-      const response = await fetch(`http://localhost:3000/api/sessions/${currentSession.sessionId}/items/${itemId}/assignees`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          assignees: newAssignees,
-          previousAssignees: previousAssignees
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.text();
-        console.error('❌ [UPDATE ASSIGNEES] Error response:', response.status, errorData);
-        throw new Error(`HTTP error! status: ${response.status} - ${errorData}`);
-      }
-
-      const data = await response.json();
-      console.log('✅ [UPDATE ASSIGNEES] Success:', data);
-      
-      // Actualizar con respuesta del servidor (si no viene del socket)
-      if (!lastUpdate || lastUpdate.type !== 'item-assignees-updated') {
-        setCurrentSession(data.session);
-        if (data.splits) {
-          setSplits(data.splits);
-        }
-      }
-      
-      setEditingItem(null);
-      
-    } catch (err) {
-      console.error('🔥 [UPDATE ASSIGNEES] Error:', err);
-      setError(err instanceof Error ? err.message : 'Error actualizando asignaciones');
-      
-      // Revertir al estado original (antes de los cambios optimistas)
-      setCurrentSession(originalSession);
-    }
-  };
-  
-  // NUEVO: Función para que se una el usuario actual
-const joinCurrentUser = async () => {
-  if (!currentSession) return;
-  
-  try {
-    const userName = prompt('Ingresa tu nombre:') || `Usuario ${currentUserId.slice(-5)}`;
-    setCurrentUserName(userName);
-    
-    const response = await fetch(`http://localhost:3000/api/sessions/${currentSession.sessionId}/join`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        user_id: currentUserId, // Usar el ID del usuario actual
-        name: userName,
-        wallet_address: walletAddress || null,
-        added_by: currentUserId, // Se agregó a sí mismo
-        is_operator: true // Es quien maneja la app
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    setCurrentSession(data.session);
-
-    // Unirse a la sesión blockchain si wallet está conectada
-    if (walletConnected && walletAddress && blockchainSessionId) {
-      const userSplit = splits?.participants.find(p => p.userId === currentUserId);
-      if (userSplit) {
-        console.log('🔗 [BLOCKCHAIN] Uniéndose a sesión blockchain...');
-        const blockchainResult = await joinBlockchainSession(
-          blockchainSessionId,
-          walletAddress,
-          Math.round(userSplit.amount * 100)
-        );
-        
-        if (blockchainResult.success) {
-          console.log('✅ [BLOCKCHAIN] Unido a sesión:', blockchainResult.txHash);
-        } else {
-          console.error('❌ [BLOCKCHAIN] Error uniéndose:', blockchainResult.error);
-        }
-      }
-    }
-    
-  } catch (err) {
-    setError(err instanceof Error ? err.message : 'Error uniéndose a sesión');
-  }
-};
-
-// NUEVO: Función para agregar otra persona manualmente
-const addOtherPerson = async () => {
-  if (!currentSession) return;
-  
-  try {
-    const personName = prompt('¿Quién se está uniendo a la sesión?\n(Ej: mi hermano, Juan, etc.)');
-    
-    if (!personName || personName.trim() === '') {
-      return; // Usuario canceló
-    }
-    
-    // Generar ID único para esta persona
-    const participantUserId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-    
-    const response = await fetch(`http://localhost:3000/api/sessions/${currentSession.sessionId}/join`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        user_id: participantUserId, // ID único para esta persona
-        name: personName.trim(),
-        wallet_address: null, // No asumir wallet para participantes manuales
-        added_by: currentUserId, // Quién agregó a esta persona
-        is_operator: false // No es quien maneja la app
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    setCurrentSession(data.session);
-    
-    // Mostrar confirmación
-    console.log(`✅ [MANUAL ADD] ${personName} agregado exitosamente`);
-    
-  } catch (err) {
-    setError(err instanceof Error ? err.message : 'Error agregando persona');
-  }
-};
-
-  const joinSession = async () => {
-    if (!currentSession) return;
-    
-    try {
-      const userName = prompt('Ingresa tu nombre:') || `User ${Date.now()}`;
-      setCurrentUserName(userName);
-      
-      const response = await fetch(`http://localhost:3000/api/sessions/${currentSession.sessionId}/join`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_id: currentUserId,
-          name: userName,
-          wallet_address: walletAddress || null
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setCurrentSession(data.session);
-
-      // NUEVO: Unirse a la sesión blockchain si wallet está conectada
-      if (walletConnected && walletAddress && blockchainSessionId) {
-        // Buscar el monto que debe pagar este usuario
-        const userSplit = splits?.participants.find(p => p.userId === currentUserId);
-        if (userSplit) {
-          console.log('🔗 [BLOCKCHAIN] Uniéndose a sesión blockchain...');
-          const blockchainResult = await joinBlockchainSession(
-            blockchainSessionId,
-            walletAddress,
-            Math.round(userSplit.amount * 100) // Convertir a centavos
-          );
-          
-          if (blockchainResult.success) {
-            console.log('✅ [BLOCKCHAIN] Unido a sesión:', blockchainResult.txHash);
-          } else {
-            console.error('❌ [BLOCKCHAIN] Error uniéndose:', blockchainResult.error);
-          }
-        }
-      }
-      
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error uniéndose a sesión');
-    }
-  };
-
-  const fetchSplits = async () => {
-    if (!currentSession) return;
-    
-    try {
-      const response = await fetch(`http://localhost:3000/api/sessions/${currentSession.sessionId}/splits`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setSplits(data.splits);
-    } catch (err) {
-      console.error('Error fetching splits:', err);
-    }
-  };
-
-  const calculateSplits = async (method: string) => {
-    if (!currentSession) return;
-    
-    setLoading(true);
-    if (sendTyping) sendTyping('calculating-splits');
-    
-    try {
-      const response = await fetch(`http://localhost:3000/api/sessions/${currentSession.sessionId}/calculate-splits`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          method: method,
-          options: {}
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setSplits(data.splits);
-      setSplitMethod(method);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error calculando splits');
-    } finally {
-      setLoading(false);
-      if (stopTyping) stopTyping();
-    }
-  };
-
-  // NUEVO: Función para pagar individual
-
-  const handleIndividualPayment = async (participant: Split) => {
-    if (!walletConnected || !walletAddress) {
-      setError('Conecta tu wallet primero');
-      return;
-    }
-
-    if (!blockchainSessionId) {
-      setError('Sesión blockchain no inicializada. Crea una nueva sesión.');
-      return;
-    }
-
-    if (participant.userId !== currentUserId) {
-      setError('Solo puedes pagar tu propia parte');
-      return;
-    }
-
-    try {
-      setPaymentStates(prev => ({ ...prev, [participant.userId]: 'paying' }));
-    
-      console.log('💰 [PAYMENT] Realizando pago individual...', {
-        sessionId: blockchainSessionId,
-        participantUserId: participant.userId,
-        walletAddress: walletAddress,
-        amount: participant.amount
-      });
-
-      // CRÍTICO: Intentar unirse al smart contract primero (por si no está registrado)
-      try {
-        console.log('🔗 [BLOCKCHAIN] Verificando registro en smart contract...');
-        const joinResult = await joinBlockchainSession(
-          blockchainSessionId,
-          walletAddress,
-          Math.round(participant.amount * 100)
-        );
-      
-        if (joinResult.success) {
-          console.log('✅ [BLOCKCHAIN] Participante registrado/verificado en smart contract');
-        }
-      } catch (joinError) {
-        console.log('⚠️ [BLOCKCHAIN] Participante ya registrado o error menor:', joinError);
-        // Continuar de todos modos
-      }
-
-      // Ahora sí realizar el pago
-      const result = await makeBlockchainPayment(blockchainSessionId, walletAddress);
-    
-      if (result.success) {
-        setPaymentStates(prev => ({ ...prev, [participant.userId]: 'paid' }));
-        console.log('✅ [PAYMENT] Pago exitoso:', result.txHash);
-      
-        // Mostrar notificación de éxito
-        notifications.push(`💰 Pago realizado: ${formatCurrency(participant.amount)}`);
-      } else {
-        setPaymentStates(prev => ({ ...prev, [participant.userId]: 'failed' }));
-        setError(result.error || 'Error en el pago');
-      }
-    } catch (error) {
-      console.error('❌ [PAYMENT] Error completo:', error);
-      setPaymentStates(prev => ({ ...prev, [participant.userId]: 'failed' }));
-      setError(error instanceof Error ? error.message : 'Error realizando pago');
-    }
-};
-  // NUEVO: Función para ejecutar pago grupal
-  const handleGroupPayment = async () => {
-    if (!walletConnected || !walletAddress || !blockchainSessionId) {
-      setError('Conecta tu wallet primero');
-      return;
-    }
-
-    try {
-      console.log('⚡ [GROUP PAYMENT] Ejecutando pago grupal...');
-      
-      const result = await executeGroupPayment(blockchainSessionId);
-      
-      if (result.success) {
-        console.log('✅ [GROUP PAYMENT] Pago grupal exitoso:', result.txHash);
-        setShowGroupPayButton(false);
-        
-        // Mostrar notificación de éxito
-        if (notifications) {
-          notifications.push(`🎉 Pago grupal completado! Tx: ${result.txHash?.slice(0, 10)}...`);
-        }
-      } else {
-        setError(result.error || 'Error en el pago grupal');
-      }
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Error ejecutando pago grupal');
-    }
-  };
-
-  const toggleParticipantSelection = (participantId: number) => {
-    setSelectedParticipants(prev => 
-      prev.includes(participantId)
-        ? prev.filter(id => id !== participantId)
-        : [...prev, participantId]
-    );
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-AR', { 
-      style: 'currency', 
-      currency: 'ARS',
-      minimumFractionDigits: 2 
-    }).format(amount);
-  };
-
-  const getParticipantNames = (assignees: number[] | any) => {
-    if (!currentSession) return '';
-    
-    // Asegurar que assignees sea siempre un array
-    let assigneesArray: number[] = [];
-    
-    if (Array.isArray(assignees)) {
-      assigneesArray = assignees;
-    } else if (assignees && typeof assignees === 'string') {
-      // Si es un string, intentar parsearlo
-      try {
-        const parsed = JSON.parse(assignees);
-        if (Array.isArray(parsed)) {
-          assigneesArray = parsed;
-        }
-      } catch (e) {
-        console.warn('Could not parse assignees:', assignees);
-        assigneesArray = [];
-      }
-    } else {
-      // Si no es ni array ni string válido, usar array vacío
-      assigneesArray = [];
-    }
-    
-    const names = assigneesArray
-      .filter(id => typeof id === 'number')
-      .map(id => currentSession.participants.find(p => p.id === id)?.name || `User ${id}`)
-      .filter(Boolean);
-    
-    if (names.length === 0 || names.length === currentSession.participants.length) {
-      return 'Todos';
-    }
-    
-    return names.join(', ');
-  };
-
-  // ✅ Generar URL única con sessionId, userId y userName
-  const generateQRValue = () => {
-    if (!currentSession) return '';
-    const baseURL = typeof window !== 'undefined' ? window.location.origin : '';
-    return `${baseURL}/session/${currentSession.sessionId}?userId=${currentUserId}&userName=${encodeURIComponent(currentUserName)}`;
-  };
-
-
-  const copyToClipboard = async () => {
-    try {
-      const qrValue = generateQRValue();
-      await navigator.clipboard.writeText(qrValue);
-      setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 2000);
-    } catch (err) {
-      console.error('Error copying to clipboard:', err);
-    }
-  };
-
-  const shareSession = async () => {
-    const qrValue = generateQRValue();
-    
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: 'QRSplit - Únete a mi sesión de pago',
-          text: `Únete para dividir la cuenta: ${currentSession?.sessionId.slice(-8)}...`,
-          url: qrValue,
-        });
-      } catch (err) {
-        console.error('Error sharing:', err);
-        copyToClipboard();
-      }
-    } else {
-      copyToClipboard();
-    }
-  };
-
-  const handleInputFocus = (action: string) => {
-    if (sendTyping) sendTyping(action);
-  };
-
-  const handleInputBlur = () => {
-    if (stopTyping) stopTyping();
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      <SimulationBanner />
-      <div className="p-4"></div>
-      {/* Real-time Notifications Component */}
-      <RealtimeNotifications
-        isConnected={isConnected}
-        connectedUsers={connectedUsers}
-        notifications={notifications}
-        onRemoveNotification={removeNotification}
-        onClearNotifications={clearNotifications}
-      />
-
-      <div className="max-w-4xl mx-auto py-8">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center mb-4">
-            <QrCode className="w-12 h-12 text-blue-600 mr-3" />
-            <h1 className="text-4xl font-bold text-gray-900">QRSplit</h1>
-            {isConnected && (
-              <Badge className="ml-3 bg-green-600">
-                <Wifi className="w-3 h-3 mr-1" />
-                Real-time
-              </Badge>
-            )}
-            {/* NUEVO: Wallet Button en header */}
-            <div className="ml-4">
-              <WalletButton size="sm" variant="outline" />
-            </div>
-          </div>
-            
-          <p className="text-xl text-gray-600 mb-4">
-            Escanea, divide, paga - Instantáneo y justo
-          </p>
-          <div className="flex items-center justify-center space-x-4 text-sm">
-            <Badge variant="outline">Backend API: {apiStatus}</Badge>
-            <Badge variant="outline">Split Engine: ✅</Badge>
-            <Badge variant="outline">QR Sharing: ✅</Badge>
-            <Badge variant={isConnected ? "default" : "secondary"}>
-              Real-time: {isConnected ? '✅' : '🔄'}
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900">
+      <section className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#0a254010_1px,transparent_1px),linear-gradient(to_bottom,#0a254010_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_110%)]" />
+        
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-24">
+          <div className="flex justify-center gap-3 mb-8">
+            <Badge 
+              className="bg-green-500/10 text-green-400 border-green-500/20 px-4 py-1.5"
+              style={{
+                opacity: isVisible ? 1 : 0,
+                transform: isVisible ? 'translateY(0)' : 'translateY(-20px)',
+                transition: 'all 0.6s ease-out 0.2s'
+              }}
+            >
+              <div className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse" />
+              Real-time ON
             </Badge>
-            {/* NUEVO: Indicador de wallet */}
-            <Badge variant={walletConnected && walletAddress ? "default" : "secondary"}>
-              <Wallet className="w-3 h-3 mr-1" />
-              Wallet: {walletConnected && walletAddress ? '✅' : '❌'}
+            <Badge 
+              className="bg-purple-500/10 text-purple-400 border-purple-500/20 px-4 py-1.5"
+              style={{
+                opacity: isVisible ? 1 : 0,
+                transform: isVisible ? 'translateY(0)' : 'translateY(-20px)',
+                transition: 'all 0.6s ease-out 0.3s'
+              }}
+            >
+              <Wallet className="w-3 h-3 mr-2" />
+              Blockchain Ready
             </Badge>
-            {blockchainSessionId && (
-              <Badge variant="outline">
-                <Link className="w-3 h-3 mr-1" />
-                Blockchain: ✅
-              </Badge>
-            )}
           </div>
-        </div>
 
-        {/* Error Display */}
-        {(error || contractError) && (
-          <Card className="mb-6 border-red-200 bg-red-50">
-            <CardContent className="p-4">
-              <p className="text-red-800 text-sm">{error || contractError}</p>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="mt-2"
-                onClick={() => {
-                  setError(null);
-                  clearContractError();
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center justify-center mb-6">
+              <div 
+                className="relative"
+                style={{
+                  opacity: isVisible ? 1 : 0,
+                  transform: isVisible ? 'scale(1) rotate(0deg)' : 'scale(0.5) rotate(-180deg)',
+                  transition: 'all 1s ease-out 0.4s'
                 }}
               >
-                Cerrar
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Main Content */}
-        {!currentSession ? (
-          /* Session Creation */
-          <Card className="max-w-md mx-auto">
-            <CardHeader>
-              <CardTitle className="text-center">Crear Nueva Sesión</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Nombre del local/evento</label>
-                <Input
-                  value={merchantId}
-                  onChange={(e) => setMerchantId(e.target.value)}
-                  onFocus={() => handleInputFocus('typing-merchant')}
-                  onBlur={handleInputBlur}
-                  placeholder="Ej: Restaurant Pizza Palace"
-                  className="w-full"
-                />
+                <QrCode className="w-20 h-20 text-emerald-400" strokeWidth={1.5} />
+                <div className="absolute inset-0 bg-emerald-400/20 blur-xl" />
               </div>
-              
-              {/* NUEVO: Indicador de wallet en creación */}
-              {!walletConnected && (
-                <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg">
-                  <p className="text-sm text-yellow-800 flex items-center">
-                    <AlertCircle className="w-4 h-4 mr-2" />
-                    Conecta tu wallet para habilitar pagos blockchain
-                  </p>
-                </div>
-              )}
-              
-              <Button 
-                onClick={createSession} 
-                disabled={loading || !merchantId}
-                className="w-full bg-blue-600 hover:bg-blue-700"
-              >
-                {loading ? 'Creando...' : '🚀 Crear & Generar QR'}
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          /* Active Session */
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            </div>
             
-            {/* QR Code Card - Prominente al inicio */}
-            <Card className="lg:col-span-2 border-2 border-blue-200">
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <QrCode className="w-5 h-5 mr-2" />
-                    Comparte tu sesión
-                    {connectedUsers.length > 0 && (
-                      <Badge className="ml-2" variant="secondary">
-                        {connectedUsers.length} conectados
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex space-x-2">
-                    <Button onClick={shareSession} size="sm" variant="outline">
-                      <Share2 className="w-4 h-4 mr-1" />
-                      Compartir
-                    </Button>
-                    <Button onClick={copyToClipboard} size="sm" variant="outline">
-                      <Copy className="w-4 h-4 mr-1" />
-                      {copiedLink ? 'Copiado!' : 'Copiar link'}
-                    </Button>
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-col md:flex-row items-center justify-center space-y-4 md:space-y-0 md:space-x-6">
-                  <div className="bg-white p-4 rounded-lg border">
-                    <CustomQRCode
-                      value={generateQRValue()}
-                      size={180}
-                    />
-                  </div>
-                  <div className="text-center md:text-left">
-                    <h3 className="font-semibold text-lg mb-2">¡Otros pueden unirse escaneando!</h3>
-                    <p className="text-gray-600 mb-2">Sesión: {currentSession.sessionId.slice(-8)}...</p>
-                    <p className="text-sm text-gray-500 mb-4">
-                      También pueden usar el link: {generateQRValue()}
-                    </p>
-                    <div className="flex items-center text-sm text-green-600">
-                      <Check className="w-4 h-4 mr-1" />
-                      Sesión activa - {currentSession.participantsCount} participantes
-                    </div>
-                    {isConnected && (
-                      <div className="flex items-center text-sm text-blue-600 mt-1">
-                        <Wifi className="w-4 h-4 mr-1" />
-                        Sincronización real-time activa
-                      </div>
-                    )}
-                    {/* NUEVO: Indicador blockchain en QR */}
-                    {blockchainSessionId && (
-                      <div className="flex items-center text-sm text-purple-600 mt-1">
-                        <Link className="w-4 h-4 mr-1" />
-                        Smart contract activo
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Session Info */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Users className="w-5 h-5 mr-2" />
-                  Sesión Activa
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <strong>Local:</strong> {merchantId}
-                  </div>
-                  <div>
-                    <strong>Estado:</strong> 
-                    <Badge className="ml-2">{currentSession.status}</Badge>
-                  </div>
-                  <div>
-                    <strong>Participantes:</strong> {currentSession.participantsCount}
-                  </div>
-                  <div>
-                    <strong>Total:</strong> {formatCurrency(parseFloat(currentSession.totalAmount))}
-                  </div>
-                </div>
-
-                {/* Participants List with real-time indicators */}
-                {currentSession.participants.length > 0 && (
-                  <div className="pt-4 border-t">
-                    <h4 className="font-medium mb-2">Participantes:</h4>
-                    <div className="space-y-2">
-                      {currentSession.participants.map((participant: Participant, index: number) => {
-                        const isConnected = connectedUsers.some((u: any) => u.userId === participant.userId);
-                        return (
-                          <div key={index} className="flex items-center justify-between text-sm bg-gray-50 px-3 py-2 rounded">
-                            <div className="flex items-center">
-                              <div className={`w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-green-500' : 'bg-gray-300'}`}></div>
-                              <User className="w-4 h-4 mr-2 text-gray-500" />
-                              <span>{participant.name || participant.userId}</span>
-                              {participant.userId === currentUserId && (
-                                <Badge variant="outline" className="ml-2 text-xs">Tú</Badge>
-                              )}
-                              {/* NUEVO: Indicador de wallet */}
-                              {participant.walletAddress && (
-                                <Wallet className="w-3 h-3 ml-2 text-purple-600" />
-                              )}
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              {isConnected && (
-                                <Badge variant="secondary" className="text-xs">Online</Badge>
-                              )}
-                              <Badge variant="secondary">{participant.userId}</Badge>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-                
-                <div className="pt-4 border-t">
-                  <h4 className="font-medium mb-2">Acciones:</h4>
-                  <div className="flex space-x-2">
-                    <Button onClick={joinSession} variant="outline" size="sm">
-                      <Users className="w-4 h-4 mr-1" />
-                      Unirse
-                    </Button>
-                    <Button onClick={() => setCurrentSession(null)} variant="outline" size="sm">
-                      Nueva Sesión
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Add Items with Assignment */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Plus className="w-5 h-5 mr-2" />
-                  Agregar Item
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Nombre del Item</label>
-                  <Input
-                    value={itemName}
-                    onChange={(e) => setItemName(e.target.value)}
-                    onFocus={() => handleInputFocus('typing-item-name')}
-                    onBlur={handleInputBlur}
-                    placeholder="Ej: Hamburguesa, Bebida..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Precio</label>
-                  <Input
-                    type="text"
-                    value={itemAmount}
-                    onChange={(e) => setItemAmount(e.target.value)}
-                    onFocus={() => handleInputFocus('typing-item-amount')}
-                    onBlur={handleInputBlur}
-                    placeholder="$2000"
-                  />
-                </div>
-                
-                {/* Participant Selection */}
-                {currentSession.participants.length > 0 && (
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      ¿Quiénes consumieron este item?
-                    </label>
-                    <div className="space-y-2">
-                      {currentSession.participants.map((participant: Participant) => (
-                        <div key={participant.id} className="flex items-center space-x-2">
-                          <Button
-                            type="button"
-                            variant={selectedParticipants.includes(participant.id) ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => toggleParticipantSelection(participant.id)}
-                            className="flex-1 justify-start"
-                          >
-                            {selectedParticipants.includes(participant.id) ? (
-                              <Check className="w-4 h-4 mr-2" />
-                            ) : (
-                              <User className="w-4 h-4 mr-2" />
-                            )}
-                            {participant.name || participant.userId}
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      {selectedParticipants.length === 0 
-                        ? "Si no seleccionas a nadie, se asignará a todos" 
-                        : `Seleccionados: ${selectedParticipants.length} de ${currentSession.participants.length}`
-                      }
-                    </p>
-                  </div>
-                )}
-
-                <Button 
-                  onClick={addItem} 
-                  disabled={loading || !itemName || !itemAmount}
-                  className="w-full"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  {loading ? 'Agregando...' : 'Agregar Item'}
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Items List with Assignment */}
-            {currentSession.items.length > 0 && (
-              <Card className="lg:col-span-2">
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <DollarSign className="w-5 h-5 mr-2" />
-                    Items en la Cuenta ({currentSession.items.length})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {currentSession.items.map((item: Item, index: number) => (
-                      <div key={index} className="border rounded-lg p-4">
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex-1">
-                            <h4 className="font-medium">{item.name}</h4>
-                            <p className="text-sm text-gray-600">
-                              Asignado a: {getParticipantNames(item.assignees || [])}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <span className="font-mono text-green-600 text-lg">
-                              {formatCurrency(item.amount)}
-                            </span>
-                            <div className="flex items-center justify-end mt-1 space-x-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setEditingItem(editingItem === item.id ? null : item.id)}
-                              >
-                                <Edit className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Edit Assignment Mode */}
-                        {editingItem === item.id && (
-                          <div className="mt-3 pt-3 border-t">
-                            <p className="text-sm font-medium mb-2">Editar asignación:</p>
-                            <div className="grid grid-cols-2 gap-2">
-                              {currentSession.participants.map((participant: Participant) => (
-                                <Button
-                                  key={participant.id}
-                                  variant={(item.assignees || []).includes(participant.id) ? "default" : "outline"}
-                                  size="sm"
-                                  onClick={() => {
-                                    const currentAssignees = item.assignees || [];
-                                    const newAssignees = currentAssignees.includes(participant.id)
-                                      ? currentAssignees.filter(id => id !== participant.id)
-                                      : [...currentAssignees, participant.id];
-                                    updateItemAssignees(item.id, newAssignees);
-                                  }}
-                                >
-                                  {(item.assignees || []).includes(participant.id) ? (
-                                    <Check className="w-3 h-3 mr-1" />
-                                  ) : (
-                                    <X className="w-3 h-3 mr-1" />
-                                  )}
-                                  {participant.name || participant.userId}
-                                </Button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                    
-                    <div className="pt-2 border-t bg-blue-50 p-3 rounded-lg">
-                      <div className="flex justify-between items-center font-bold">
-                        <span>Total:</span>
-                        <span className="text-lg font-mono text-blue-600">
-                          {formatCurrency(parseFloat(currentSession.totalAmount))}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Split Calculator with Assignment Details + BLOCKCHAIN PAYMENTS */}
-            {currentSession.participants.length > 0 && splits && (
-              <Card className="lg:col-span-2">
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <Calculator className="w-5 h-5 mr-2" />
-                      División de Pagos
-                      {isConnected && (
-                        <Badge className="ml-2" variant="outline">
-                          <Wifi className="w-3 h-3 mr-1" />
-                          Sincronizado
-                        </Badge>
-                      )}
-                      {/* NUEVO: Indicador blockchain */}
-                      {blockchainSessionId && walletConnected && (
-                        <Badge className="ml-2" variant="outline">
-                          <Link className="w-3 h-3 mr-1" />
-                          Blockchain Ready
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex space-x-2">
-                      <Button 
-                        size="sm"
-                        variant={splitMethod === 'proportional' ? 'default' : 'outline'}
-                        onClick={() => calculateSplits('proportional')}
-                      >
-                        Proporcional
-                      </Button>
-                      <Button 
-                        size="sm"
-                        variant={splitMethod === 'equal' ? 'default' : 'outline'}
-                        onClick={() => calculateSplits('equal')}
-                      >
-                        Igual
-                      </Button>
-                    </div>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {/* Summary */}
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                        <div>
-                          <span className="text-gray-600">Método:</span>
-                          <p className="font-medium capitalize">{splits.method}</p>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Participantes:</span>
-                          <p className="font-medium">{splits.summary.participantCount}</p>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Promedio:</span>
-                          <p className="font-medium">{formatCurrency(splits.summary.averageAmount)}</p>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Total:</span>
-                          <p className="font-medium">{formatCurrency(splits.calculatedTotal)}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* NUEVO: Botón de pago grupal */}
-                    {showGroupPayButton && walletConnected && blockchainSessionId && (
-                      <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h4 className="font-semibold text-green-800">¡Todos han pagado!</h4>
-                            <p className="text-sm text-green-600">Ejecuta el pago grupal para completar la transacción</p>
-                          </div>
-                          <Button
-                            onClick={handleGroupPayment}
-                            disabled={contractLoading}
-                            className="bg-green-600 hover:bg-green-700"
-                          >
-                            {contractLoading ? (
-                              <>
-                                <Clock className="w-4 h-4 mr-2 animate-spin" />
-                                Procesando...
-                              </>
-                            ) : (
-                              <>
-                                <Link className="w-4 h-4 mr-2" />
-                                Ejecutar Pago Grupal
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Individual Splits con botones de pago */}
-                    <div className="space-y-3">
-                      {splits.participants.map((participant: Split, index: number) => {
-                        const isCurrentUser = participant.userId === currentUserId;
-                        const isConnected = connectedUsers.some((u: any) => u.userId === participant.userId);
-                        const paymentState = paymentStates[participant.userId] || 'pending';
-                        
-                        return (
-                          <div key={index} className={`border rounded-lg p-4 ${isCurrentUser ? 'border-blue-300 bg-blue-50' : ''}`}>
-                            <div className="flex justify-between items-start mb-2">
-                              <div className="flex items-center">
-                                <div className={`w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-green-500' : 'bg-gray-300'}`}></div>
-                                <User className="w-4 h-4 mr-2 text-gray-500" />
-                                <div>
-                                  <h4 className="font-medium flex items-center">
-                                    {participant.name}
-                                    {isCurrentUser && (
-                                      <Badge variant="outline" className="ml-2 text-xs">Tú</Badge>
-                                    )}
-                                  </h4>
-                                  <p className="text-sm text-gray-500">{participant.userId}</p>
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <p className={`text-lg font-bold ${isCurrentUser ? 'text-blue-600' : 'text-green-600'}`}>
-                                  {formatCurrency(participant.amount)}
-                                </p>
-                                <p className="text-sm text-gray-500">
-                                  {participant.percentage.toFixed(1)}% del total
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* NUEVO: Botón de pago blockchain */}
-                            {isCurrentUser && walletConnected && blockchainSessionId && (
-                              <div className="mt-3 pt-3 border-t">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center space-x-2">
-                                    {paymentState === 'paid' ? (
-                                      <Badge className="bg-green-600">
-                                        <CheckCircle className="w-3 h-3 mr-1" />
-                                        Pagado
-                                      </Badge>
-                                    ) : paymentState === 'paying' ? (
-                                      <Badge variant="outline">
-                                        <Clock className="w-3 h-3 mr-1 animate-spin" />
-                                        Procesando...
-                                      </Badge>
-                                    ) : paymentState === 'failed' ? (
-                                      <Badge variant="destructive">
-                                        <AlertCircle className="w-3 h-3 mr-1" />
-                                        Error
-                                      </Badge>
-                                    ) : (
-                                      <Badge variant="outline">
-                                        <Clock className="w-3 h-3 mr-1" />
-                                        Pendiente
-                                      </Badge>
-                                    )}
-                                  </div>
-
-                                  {paymentState === 'pending' && (
-                                    <Button
-                                      onClick={() => handleIndividualPayment(participant)}
-                                      disabled={contractLoading}
-                                      size="sm"
-                                      className="bg-purple-600 hover:bg-purple-700"
-                                    >
-                                      <Wallet className="w-4 h-4 mr-1" />
-                                      Pagar con Blockchain
-                                    </Button>
-                                  )}
-
-                                  {paymentState === 'failed' && (
-                                    <Button
-                                      onClick={() => handleIndividualPayment(participant)}
-                                      disabled={contractLoading}
-                                      size="sm"
-                                      variant="outline"
-                                    >
-                                      <Wallet className="w-4 h-4 mr-1" />
-                                      Reintentar
-                                    </Button>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* No wallet connected warning */}
-                            {isCurrentUser && !walletConnected && (
-                              <div className="mt-3 pt-3 border-t">
-                                <div className="bg-yellow-50 border border-yellow-200 p-3 rounded">
-                                  <p className="text-sm text-yellow-800 flex items-center">
-                                    <AlertCircle className="w-4 h-4 mr-2" />
-                                    Conecta tu wallet para pagar con blockchain
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-                            
-                            {/* Items detail para método proporcional */}
-                            {splits.method === 'proportional' && participant.items.length > 0 && (
-                              <div className="mt-3 pt-3 border-t">
-                                <p className="text-sm text-gray-600 mb-2">Items asignados:</p>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                  {participant.items.map((item: any, idx: number) => (
-                                    <div key={idx} className="flex justify-between text-sm bg-gray-50 px-2 py-1 rounded">
-                                      <span>{item.name}</span>
-                                      <span>{formatCurrency(item.share)}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Accuracy check */}
-                    {Math.abs(splits.difference) > 0.01 && (
-                      <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg">
-                        <p className="text-sm text-yellow-800">
-                          <TrendingUp className="w-4 h-4 inline mr-1" />
-                          Diferencia de redondeo: {formatCurrency(splits.difference)}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            <h1 
+              className="text-6xl md:text-7xl font-bold mb-6 bg-gradient-to-r from-white via-emerald-200 to-emerald-400 bg-clip-text text-transparent"
+              style={{
+                opacity: isVisible ? 1 : 0,
+                transform: isVisible ? 'translateY(0)' : 'translateY(30px)',
+                transition: 'all 1s ease-out 0.6s'
+              }}
+            >
+              QRSplit
+            </h1>
+            
+            <p 
+              className="text-3xl md:text-4xl font-semibold text-white mb-4"
+              style={{
+                opacity: isVisible ? 1 : 0,
+                transform: isVisible ? 'translateY(0)' : 'translateY(30px)',
+                transition: 'all 1s ease-out 0.8s'
+              }}
+            >
+              Divide cuentas. Garantiza pagos. On-chain.
+            </p>
+            
+            <p 
+              className="text-xl text-slate-300 max-w-2xl mx-auto"
+              style={{
+                opacity: isVisible ? 1 : 0,
+                transform: isVisible ? 'translateY(0)' : 'translateY(30px)',
+                transition: 'all 1s ease-out 1s'
+              }}
+            >
+              Escanea, divide, paga - Instantáneo y justo
+            </p>
           </div>
-        )}
 
-        {/* Footer */}
-        <div className="mt-12 text-center text-sm text-gray-500">
-          <p>QRSplit v3.0 - Blockchain MVP para Starknet Hackathon</p>
-          <div className="mt-2 space-x-4">
-            <span>QR Sharing: ✅</span>
-            <span>Real-time Splits: {isConnected ? '✅' : '🔄'}</span>
-            <span>Socket.io Sync: {isConnected ? '✅' : '❌'}</span>
-            <span>Smart Contracts: {blockchainSessionId ? '✅' : '🔄'}</span>
-            <span>Wallet Integration: {walletConnected ? '✅' : '❌'}</span>
-            <span>Mobile Ready: ✅</span>
+          <div className="flex justify-center mb-16">
+            <Link href="/app">
+              <Button 
+                size="lg"
+                className="group relative bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white font-semibold px-12 py-6 text-lg shadow-2xl shadow-emerald-500/50 transition-all hover:shadow-emerald-500/70 hover:scale-105"
+                style={{
+                  opacity: isVisible ? 1 : 0,
+                  transform: isVisible ? 'scale(1)' : 'scale(0.8)',
+                  transition: 'all 0.8s ease-out 1.2s'
+                }}
+              >
+                <span className="flex items-center gap-3">
+                  Abrir QRSplit App
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </span>
+                <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-cyan-500/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity -z-10" />
+              </Button>
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+            <div 
+              className="bg-slate-800/50 backdrop-blur-sm border border-emerald-500/20 rounded-lg p-6"
+              style={{
+                opacity: isVisible ? 1 : 0,
+                transform: isVisible ? 'translateY(0)' : 'translateY(40px)',
+                transition: 'all 0.8s ease-out 1.4s'
+              }}
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                <h3 className="font-semibold text-white">Sin registro requerido</h3>
+              </div>
+              <p className="text-sm text-slate-400">Escanea el QR y listo. No necesitas crear cuenta ni compartir datos personales.</p>
+            </div>
+            
+            <div 
+              className="bg-slate-800/50 backdrop-blur-sm border border-purple-500/20 rounded-lg p-6"
+              style={{
+                opacity: isVisible ? 1 : 0,
+                transform: isVisible ? 'translateY(0)' : 'translateY(40px)',
+                transition: 'all 0.8s ease-out 1.5s'
+              }}
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <Lock className="w-5 h-5 text-purple-400 flex-shrink-0" />
+                <h3 className="font-semibold text-white">Pagos garantizados on-chain</h3>
+              </div>
+              <p className="text-sm text-slate-400">Smart contracts aseguran que todos paguen o nadie paga. Sin deudas pendientes.</p>
+            </div>
+            
+            <div 
+              className="bg-slate-800/50 backdrop-blur-sm border border-cyan-500/20 rounded-lg p-6"
+              style={{
+                opacity: isVisible ? 1 : 0,
+                transform: isVisible ? 'translateY(0)' : 'translateY(40px)',
+                transition: 'all 0.8s ease-out 1.6s'
+              }}
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <Zap className="w-5 h-5 text-cyan-400 flex-shrink-0" />
+                <h3 className="font-semibold text-white">Splits automáticos</h3>
+              </div>
+              <p className="text-sm text-slate-400">El cálculo se hace en tiempo real. Todos ven los cambios instantáneamente.</p>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
+
+      <section className="py-24 bg-slate-900/50 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-bold text-white mb-4">
+              ¿Por qué QRSplit?
+            </h2>
+            <p className="text-xl text-slate-400">
+              La única app de pagos grupales con garantía blockchain
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm hover:bg-slate-800/70 transition-all group">
+              <CardContent className="p-8">
+                <div className="w-14 h-14 bg-gradient-to-br from-emerald-500 to-cyan-500 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                  <QrCode className="w-8 h-8 text-white" />
+                </div>
+                <h3 className="text-2xl font-semibold text-white mb-3">
+                  QR Sharing
+                </h3>
+                <p className="text-slate-400 mb-4">
+                  Únete a sesiones escaneando un código QR. Sin registros, sin fricciones.
+                </p>
+                <div className="flex items-center text-emerald-400 text-sm font-medium">
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Instantáneo
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm hover:bg-slate-800/70 transition-all group">
+              <CardContent className="p-8">
+                <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                  <Zap className="w-8 h-8 text-white" />
+                </div>
+                <h3 className="text-2xl font-semibold text-white mb-3">
+                  Real-time Splits
+                </h3>
+                <p className="text-slate-400 mb-4">
+                  Cálculo automático instantáneo. Todos ven los cambios en tiempo real.
+                </p>
+                <div className="flex items-center text-purple-400 text-sm font-medium">
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Socket.io Sync
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm hover:bg-slate-800/70 transition-all group">
+              <CardContent className="p-8">
+                <div className="w-14 h-14 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                  <Lock className="w-8 h-8 text-white" />
+                </div>
+                <h3 className="text-2xl font-semibold text-white mb-3">
+                  Pagos Atómicos
+                </h3>
+                <p className="text-slate-400 mb-4">
+                  Todos pagan simultáneamente o la transacción falla. Sin deudas pendientes.
+                </p>
+                <div className="flex items-center text-cyan-400 text-sm font-medium">
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Smart Contracts
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      <section className="py-24">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-bold text-white mb-4">
+              Cómo Funciona
+            </h2>
+            <p className="text-xl text-slate-400">
+              Tres pasos simples para pagos grupales garantizados
+            </p>
+          </div>
+
+          <div className="max-w-5xl mx-auto">
+            <div className="flex flex-col md:flex-row items-center justify-center gap-8">
+              <div className="flex-1 max-w-xs">
+                <div className="flex items-center justify-center mb-6">
+                  <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-cyan-500 rounded-full flex items-center justify-center text-2xl font-bold text-white shadow-2xl shadow-emerald-500/50">
+                    1
+                  </div>
+                </div>
+                <h3 className="text-2xl font-semibold text-white text-center mb-3">
+                  Crea Sesión
+                </h3>
+                <p className="text-slate-400 text-center">
+                  Genera un QR code único para tu grupo. Comparte instantáneamente.
+                </p>
+              </div>
+
+              <div className="hidden md:block">
+                <ArrowRight className="w-8 h-8 text-emerald-500" />
+              </div>
+
+              <div className="flex-1 max-w-xs">
+                <div className="flex items-center justify-center mb-6">
+                  <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-2xl font-bold text-white shadow-2xl shadow-purple-500/50">
+                    2
+                  </div>
+                </div>
+                <h3 className="text-2xl font-semibold text-white text-center mb-3">
+                  Agrega Items
+                </h3>
+                <p className="text-slate-400 text-center">
+                  Todos agregan lo que consumieron. El split se calcula automáticamente.
+                </p>
+              </div>
+
+              <div className="hidden md:block">
+                <ArrowRight className="w-8 h-8 text-purple-500" />
+              </div>
+
+              <div className="flex-1 max-w-xs">
+                <div className="flex items-center justify-center mb-6">
+                  <div className="w-16 h-16 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-full flex items-center justify-center text-2xl font-bold text-white shadow-2xl shadow-cyan-500/50">
+                    3
+                  </div>
+                </div>
+                <h3 className="text-2xl font-semibold text-white text-center mb-3">
+                  Pago Blockchain
+                </h3>
+                <p className="text-slate-400 text-center">
+                  Conecta wallet. Ejecuta pago atómico. Todos pagan o nadie paga.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="py-24 bg-gradient-to-r from-purple-900/20 to-cyan-900/20 backdrop-blur-sm">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <Card className="bg-slate-800/80 border-purple-500/30 backdrop-blur-sm shadow-2xl shadow-purple-500/20">
+            <CardContent className="p-12">
+              <div className="flex items-start gap-6">
+                <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-cyan-500 rounded-2xl flex items-center justify-center flex-shrink-0">
+                  <TrendingUp className="w-8 h-8 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-3xl font-bold text-white mb-4">
+                    El Diferenciador Clave
+                  </h3>
+                  <p className="text-xl text-slate-300 mb-6">
+                    A diferencia de <span className="text-purple-400 font-semibold">Splitwise</span> y otras apps tradicionales que solo <span className="italic">calculan</span> quién debe qué, <span className="text-emerald-400 font-semibold">QRSplit ejecuta pagos atómicos on-chain</span> que garantizan que todos paguen simultáneamente.
+                  </p>
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <div className="flex items-start gap-3">
+                      <div className="w-2 h-2 bg-red-500 rounded-full mt-2" />
+                      <div>
+                        <div className="font-semibold text-white mb-1">Apps Tradicionales</div>
+                        <div className="text-sm text-slate-400">Solo calculan deudas. No garantizan pagos.</div>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div className="w-2 h-2 bg-emerald-500 rounded-full mt-2" />
+                      <div>
+                        <div className="font-semibold text-white mb-1">QRSplit</div>
+                        <div className="text-sm text-slate-400">Smart contracts atómicos. Pagos garantizados.</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      <section className="py-24">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h2 className="text-5xl font-bold text-white mb-6">
+            Listo para Dividir y Pagar
+          </h2>
+          <p className="text-xl text-slate-300 mb-10">
+            Únete a la revolución de pagos grupales descentralizados
+          </p>
+          <Link href="/app">
+            <Button 
+              size="lg"
+              className="group relative bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white font-semibold px-12 py-6 text-lg shadow-2xl shadow-emerald-500/50 transition-all hover:shadow-emerald-500/70 hover:scale-105"
+            >
+              <span className="flex items-center gap-3">
+                Abrir QRSplit App
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </span>
+              <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-cyan-500/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity -z-10" />
+            </Button>
+          </Link>
+        </div>
+      </section>
+
+      <footer className="border-t border-slate-800 py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="text-slate-400 text-sm">
+              QRSplit v3.0 - Blockchain MVP para Starknet Hackathon
+            </div>
+            <div className="flex gap-6 text-sm text-slate-400">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-400" />
+                QR Sharing
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-purple-400" />
+                Real-time Splits
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-cyan-400" />
+                Smart Contracts
+              </div>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

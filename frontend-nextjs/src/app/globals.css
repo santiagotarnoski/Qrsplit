@@ -1,13 +1,45 @@
 @import "tailwindcss";
 
+/* ========================================
+   QRSplit - Sistema de Diseño
+   Fintech Profesional con Toques Crypto
+   ======================================== */
+
 :root {
+  /* Colores Base Fintech */
+  --color-deep-blue: #0A2540;
+  --color-deep-blue-hover: #1E3A5F;
+  --color-mint-green: #00D9A0;
+  --color-mint-green-hover: #00B386;
+  
+  /* Toques Crypto */
+  --color-purple-glow: #A855F7;
+  --color-cyan-glow: #06B6D4;
+  
+  /* Neutrales Premium */
+  --color-slate-950: #020617;
+  --color-slate-900: #0F172A;
+  --color-slate-800: #1E293B;
+  --color-slate-100: #F1F5F9;
+  --color-slate-600: #475569;
+  
+  /* Sistema de Colores Originales */
   --background: #ffffff;
   --foreground: #171717;
 }
 
 @theme inline {
+  /* Colores QRSplit */
+  --color-qr-primary: var(--color-deep-blue);
+  --color-qr-accent: var(--color-mint-green);
+  --color-qr-glow-purple: var(--color-purple-glow);
+  --color-qr-glow-cyan: var(--color-cyan-glow);
+  
+  /* Backgrounds */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  
+  /* Fuentes */
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -22,5 +54,199 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* ========================================
+   Animaciones Blockchain
+   ======================================== */
+
+@keyframes blockchain-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes blockchain-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(168, 85, 247, 0.6);
+  }
+}
+
+@keyframes hashing-rotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes node-connect {
+  0% {
+    stroke-dashoffset: 100;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Clases de utilidad para animaciones blockchain */
+.blockchain-pulse {
+  animation: blockchain-pulse 2s ease-in-out infinite;
+}
+
+.blockchain-glow {
+  animation: blockchain-glow 3s ease-in-out infinite;
+}
+
+.hashing-loader {
+  animation: hashing-rotate 1.5s linear infinite;
+}
+
+/* ========================================
+   Glassmorphism Effects
+   ======================================== */
+
+.glass-card {
+  background: rgba(30, 41, 59, 0.5);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-card-light {
+  background: rgba(241, 245, 249, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* ========================================
+   Glow Effects para Wallets
+   ======================================== */
+
+.wallet-glow {
+  position: relative;
+}
+
+.wallet-glow::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: linear-gradient(45deg, var(--color-purple-glow), var(--color-cyan-glow));
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.3s;
+  z-index: -1;
+  filter: blur(8px);
+}
+
+.wallet-glow:hover::before {
+  opacity: 0.5;
+}
+
+/* ========================================
+   Scrollbar Styling
+   ======================================== */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-slate-900);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-slate-600);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-mint-green);
+}
+
+/* ========================================
+   Transiciones Suaves Globales
+   ======================================== */
+
+* {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* ========================================
+   Focus States Accesibles
+   ======================================== */
+
+*:focus-visible {
+  outline: 2px solid var(--color-mint-green);
+  outline-offset: 2px;
+}
+
+/* ========================================
+   Utilidades Personalizadas
+   ======================================== */
+
+.text-gradient-crypto {
+  background: linear-gradient(to right, var(--color-purple-glow), var(--color-cyan-glow));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.bg-gradient-fintech {
+  background: linear-gradient(135deg, var(--color-deep-blue) 0%, var(--color-mint-green) 100%);
+}
+
+/* ========================================
+   Loading Spinner Blockchain Style
+   ======================================== */
+
+.blockchain-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(168, 85, 247, 0.1);
+  border-top-color: var(--color-purple-glow);
+  border-radius: 50%;
+  animation: hashing-rotate 1s linear infinite;
+}
+
+.blockchain-spinner::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(6, 182, 212, 0.1);
+  border-top-color: var(--color-cyan-glow);
+  border-radius: 50%;
+  animation: hashing-rotate 0.8s linear infinite reverse;
+}
+
+/* ========================================
+   Responsive Typography
+   ======================================== */
+
+@media (max-width: 640px) {
+  html {
+    font-size: 14px;
+  }
+}
+
+@media (min-width: 1920px) {
+  html {
+    font-size: 18px;
+  }
 }
