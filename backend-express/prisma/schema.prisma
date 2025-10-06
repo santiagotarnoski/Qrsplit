@@ -8,19 +8,19 @@ datasource db {
 }
 
 model Session {
-  id                String   @id @default(cuid())
-  sessionId         String   @unique @map("session_id")
-  merchantId        String   @map("merchant_id")
-  status            String   @default("active")
-  totalAmount       Float    @default(0) @map("total_amount")
-  participantsCount Int      @default(0) @map("participants_count")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  id                String    @id @default(cuid())
+  sessionId         String    @unique @map("session_id")
+  merchantId        String    @map("merchant_id")
+  status            String    @default("active")
+  totalAmount       Float     @default(0) @map("total_amount")
+  participantsCount Int       @default(0) @map("participants_count")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
   timeoutAt         DateTime? @map("timeout_at")
 
-  participants      Participant[]
-  items             Item[]
-  payments          Payment[]
+  participants Participant[]
+  items        Item[]
+  payments     Payment[]     @relation("SessionPayments") // 👈 nombre explícito
 
   @@map("sessions")
 }
@@ -35,39 +35,52 @@ model Participant {
   addedBy       String?  @map("added_by")
   isOperator    Boolean  @default(false) @map("is_operator")
 
-  session       Session  @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+  session Session @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
 
+  // 👇 lado opuesto de Payment.participant (era lo que faltaba)
+  payments Payment[] @relation("ParticipantPayments")
+
+  @@unique([sessionId, userId])
+  @@unique([sessionId, walletAddress])
+  @@index([sessionId])
   @@map("participants")
 }
 
 model Item {
-  id         String   @id @default(cuid())
-  sessionId  String   @map("session_id")
-  name       String
-  amount     Float
-  tax        Float    @default(0)
-  tip        Float    @default(0)
-  assignees  String   @default("[]")
-  addedAt    DateTime @default(now()) @map("added_at")
+  id        String   @id @default(cuid())
+  sessionId String   @map("session_id")
+  name      String
+  amount    Float
+  tax       Float    @default(0)
+  tip       Float    @default(0)
+  assignees String   @default("[]")
+  addedAt   DateTime @default(now()) @map("added_at")
 
-  session    Session  @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+  session Session @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
 
   @@map("items")
 }
 
 model Payment {
-  id           String   @id @default(cuid())
-  sessionId    String   @map("session_id")
-  fromAddress  String   @map("from_address")
-  toAddress    String   @map("to_address")
-  amount       Float
-  tokenAddress String   @map("token_address")
-  txHash       String?  @map("tx_hash")
-  status       String   @default("pending")
-  createdAt    DateTime @default(now()) @map("created_at")
-  confirmedAt  DateTime? @map("confirmed_at")
+  id            String    @id @default(cuid())
+  sessionId     String    @map("session_id")
+  participantId String?   @map("participant_id")
+  fromAddress   String    @map("from_address")
+  toAddress     String    @map("to_address")
+  amount        Float
+  tokenAddress  String    @map("token_address")
+  txHash        String?   @map("tx_hash")
+  status        String    @default("pending")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  confirmedAt   DateTime? @map("confirmed_at")
 
-  session      Session  @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+  // 👇 relación con Session (le ponemos nombre explícito también)
+  session Session @relation("SessionPayments", fields: [sessionId], references: [sessionId], onDelete: Cascade)
 
+  // 👇 relación con Participant (con nombre y lado opuesto en Participant)
+  participant Participant? @relation("ParticipantPayments", fields: [participantId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId])
+  @@index([participantId])
   @@map("payments")
 }

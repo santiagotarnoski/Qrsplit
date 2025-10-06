@@ -1,3 +1,4 @@
+// server.js
 const express = require('express');
 const cors = require('cors');
 const { createServer } = require('http');
@@ -11,8 +12,11 @@ require('dotenv').config();
 const app = express();
 const server = createServer(app);
 const prisma = new PrismaClient();
+
+// --- util para parsear assignees que pueden venir como string/JSON
 const parseAssignees = (assigneesString) => {
   try {
+    if (Array.isArray(assigneesString)) return assigneesString;
     return JSON.parse(assigneesString || '[]');
   } catch {
     return [];
@@ -27,11 +31,9 @@ const io = new Server(server, {
   }
 });
 
-
-
 // 🔄 REAL-TIME: Store para sesiones activas y usuarios conectados
 const activeSessions = new Map(); // sessionId -> { users: Set, lastActivity: Date }
-const userSessions = new Map(); // socketId -> { sessionId, userId, userName }
+const userSessions = new Map();   // socketId  -> { sessionId, userId, userName }
 
 // Security middleware
 app.use(helmet());
@@ -47,22 +49,19 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Función corregida: Sanitización de números
+// Función: Sanitización de números
 const sanitizeNumber = (value) => {
   if (value === null || value === undefined) return 0;
 
   let str = String(value).trim();
-  
   console.log(`🔢 [DEBUG] Valor original recibido: "${value}"`);
 
   if (str.includes(',')) {
     str = str.replace(/\./g, '').replace(',', '.');
     console.log(`🔢 [COMA DETECTADA] Convertido a: "${str}"`);
-  } 
-  else if (str.includes('.')) {
+  } else if (str.includes('.')) {
     const lastDotIndex = str.lastIndexOf('.');
     const digitsAfterLastDot = str.length - lastDotIndex - 1;
-    
     if (digitsAfterLastDot === 2) {
       console.log(`🔢 [PUNTO DECIMAL] Mantenido: "${str}"`);
     } else {
@@ -70,10 +69,9 @@ const sanitizeNumber = (value) => {
       console.log(`🔢 [PUNTOS DE MILES] Convertido a: "${str}"`);
     }
   }
-  
+
   const result = parseFloat(str);
   console.log(`🔢 [RESULTADO FINAL] "${value}" → ${result}`);
-  
   return isNaN(result) ? 0 : result;
 };
 
@@ -85,15 +83,15 @@ const SplitMethods = {
   CUSTOM: 'custom'
 };
 
-// SPLIT ENGINE - Clase principal
+// =======================
+//   SPLIT ENGINE (FIX)
+// =======================
 class SplitEngine {
-  
   static calculateEqualSplit(totalAmount, participants) {
     const participantCount = participants.length;
     if (participantCount === 0) return [];
 
     const amountPerPerson = totalAmount / participantCount;
-    
     return participants.map(participant => ({
       participantId: participant.id,
       userId: participant.userId,
@@ -105,28 +103,36 @@ class SplitEngine {
     }));
   }
 
+  // ✅ NORMALIZA siempre items (amount/tax/tip numéricos y assignees como array)
   static calculateProportionalSplit(items, participants) {
     const participantTotals = new Map();
     let grandTotal = 0;
 
     participants.forEach(p => participantTotals.set(p.id, 0));
 
-    items.forEach(item => {
-      const itemTotal = Number(item.amount) + Number(item.tax || 0) + Number(item.tip || 0);
+    (items || []).forEach(raw => {
+      const item = {
+        ...raw,
+        amount: Number(raw.amount) || 0,
+        tax: Number(raw.tax) || 0,
+        tip: Number(raw.tip) || 0,
+        assignees: Array.isArray(raw.assignees) ? raw.assignees : parseAssignees(raw.assignees)
+      };
+
+      const itemTotal = item.amount + item.tax + item.tip;
       grandTotal += itemTotal;
 
-      if (!item.assignees || item.assignees.length === 0) {
-        const amountPerPerson = itemTotal / participants.length;
+      const assignees = Array.isArray(item.assignees) ? item.assignees : [];
+      if (assignees.length === 0) {
+        const amountPerPerson = participants.length > 0 ? (itemTotal / participants.length) : 0;
         participants.forEach(p => {
-          const current = participantTotals.get(p.id) || 0;
-          participantTotals.set(p.id, current + amountPerPerson);
+          participantTotals.set(p.id, (participantTotals.get(p.id) || 0) + amountPerPerson);
         });
       } else {
-        const amountPerAssignee = itemTotal / item.assignees.length;
-        item.assignees.forEach(assigneeId => {
+        const amountPerAssignee = itemTotal / assignees.length;
+        assignees.forEach(assigneeId => {
           if (participantTotals.has(assigneeId)) {
-            const current = participantTotals.get(assigneeId) || 0;
-            participantTotals.set(assigneeId, current + amountPerAssignee);
+            participantTotals.set(assigneeId, (participantTotals.get(assigneeId) || 0) + amountPerAssignee);
           }
         });
       }
@@ -135,11 +141,17 @@ class SplitEngine {
     return participants.map(participant => {
       const amount = participantTotals.get(participant.id) || 0;
       const percentage = grandTotal > 0 ? (amount / grandTotal) * 100 : 0;
-      
-      const participantItems = items.filter(item => {
-        if (!item.assignees || item.assignees.length === 0) return true;
-        return item.assignees.includes(participant.id);
-      });
+
+      const participantItems = (items || [])
+        .map(raw => ({
+          ...raw,
+          assignees: Array.isArray(raw.assignees) ? raw.assignees : parseAssignees(raw.assignees),
+          amount: Number(raw.amount) || 0
+        }))
+        .filter(item => {
+          if (!item.assignees || item.assignees.length === 0) return true;
+          return item.assignees.includes(participant.id);
+        });
 
       return {
         participantId: participant.id,
@@ -147,21 +159,25 @@ class SplitEngine {
         name: participant.name || `User ${participant.userId}`,
         amount: Number(amount.toFixed(2)),
         percentage: Number(percentage.toFixed(2)),
-        items: participantItems.map(item => ({
-          id: item.id,
-          name: item.name,
-          amount: Number(item.amount),
-          share: item.assignees && item.assignees.length > 0 
-            ? Number((Number(item.amount) / item.assignees.length).toFixed(2))
-            : Number((Number(item.amount) / participants.length).toFixed(2))
-        })),
+        items: participantItems.map(item => {
+          const assignees = Array.isArray(item.assignees) ? item.assignees : [];
+          const denom = assignees.length > 0 ? assignees.length : (participants.length || 1);
+          return {
+            id: item.id,
+            name: item.name,
+            amount: Number(item.amount) || 0,
+            share: Number(((Number(item.amount) || 0) / denom).toFixed(2))
+          };
+        }),
         method: SplitMethods.PROPORTIONAL
       };
     });
   }
 
+  // ✅ Normalizamos acá también para blindar todos los endpoints
   static calculateSplits(sessionData, method = SplitMethods.PROPORTIONAL, options = {}) {
-    const { participants, items } = sessionData;
+    const participants = sessionData.participants || [];
+    const rawItems = sessionData.items || [];
     const totalAmount = Number(sessionData.totalAmount || 0);
 
     console.log(`🧮 [SPLIT ENGINE] Calculando ${method} para ${participants.length} participantes`);
@@ -176,22 +192,26 @@ class SplitEngine {
       };
     }
 
-    let splits = [];
+    const items = rawItems.map(it => ({
+      ...it,
+      amount: Number(it.amount) || 0,
+      tax: Number(it.tax) || 0,
+      tip: Number(it.tip) || 0,
+      assignees: Array.isArray(it.assignees) ? it.assignees : parseAssignees(it.assignees)
+    }));
 
+    let splits = [];
     switch (method) {
       case SplitMethods.EQUAL:
         splits = this.calculateEqualSplit(totalAmount, participants);
         break;
-      
       case SplitMethods.PROPORTIONAL:
-        splits = this.calculateProportionalSplit(items, participants);
-        break;
-      
       default:
         splits = this.calculateProportionalSplit(items, participants);
+        break;
     }
 
-    const calculatedTotal = splits.reduce((sum, split) => sum + split.amount, 0);
+    const calculatedTotal = splits.reduce((sum, s) => sum + s.amount, 0);
     const averageAmount = splits.length > 0 ? calculatedTotal / splits.length : 0;
 
     const result = {
@@ -216,20 +236,13 @@ class SplitEngine {
 // 🔄 REAL-TIME: Función para broadcast de actualizaciones de sesión
 const broadcastSessionUpdate = async (sessionId, updateType, data) => {
   try {
-    // Obtener sesión completa actualizada
     const session = await prisma.session.findUnique({
       where: { sessionId },
-      include: {
-        participants: true,
-        items: true,
-        payments: true
-      }
+      include: { participants: true, items: true, payments: true }
     });
 
     if (!session) return;
 
-    // Calcular splits automáticamente si hay participantes
-    // Parsear assignees para todas las sesiones
     const sessionWithParsedItems = {
       ...session,
       items: session.items.map(item => ({
@@ -238,7 +251,6 @@ const broadcastSessionUpdate = async (sessionId, updateType, data) => {
       }))
     };
 
-    // Calcular splits automáticamente si hay participantes
     let splits = null;
     if (sessionWithParsedItems.participants.length > 0) {
       splits = SplitEngine.calculateSplits(sessionWithParsedItems, SplitMethods.PROPORTIONAL);
@@ -246,18 +258,15 @@ const broadcastSessionUpdate = async (sessionId, updateType, data) => {
 
     const updatePayload = {
       type: updateType,
-      session,
+      session: sessionWithParsedItems,
       splits,
       data,
       timestamp: new Date().toISOString(),
       connectedUsers: activeSessions.get(sessionId)?.users.size || 0
     };
 
-    // Broadcast a todos los usuarios de la sesión
     io.to(sessionId).emit('session-updated', updatePayload);
-    
     console.log(`🔄 [BROADCAST] ${updateType} enviado a sesión ${sessionId} (${updatePayload.connectedUsers} usuarios)`);
-
   } catch (error) {
     console.error('🔥 [BROADCAST ERROR]', error);
   }
@@ -271,8 +280,8 @@ app.get('/', (req, res) => {
     lastActivity: data.lastActivity
   }));
 
-  res.json({ 
-    message: 'QRSplit API v3.0 - Real-time Enabled', 
+  res.json({
+    message: 'QRSplit API v3.0 - Real-time Enabled',
     status: 'running',
     timestamp: new Date().toISOString(),
     realtime: {
@@ -282,7 +291,7 @@ app.get('/', (req, res) => {
     },
     features: [
       'Express.js',
-      'Socket.io Real-time Sync', 
+      'Socket.io Real-time Sync',
       'PostgreSQL Database',
       'Prisma ORM',
       'CORS Enabled',
@@ -296,7 +305,7 @@ app.get('/', (req, res) => {
     endpoints: {
       health: '/health',
       sessions: '/api/sessions',
-      payments: '/api/payments',
+      payments: '/api/sessions/:id/pay',   // ← actualizado
       splits: '/api/sessions/:id/splits',
       realtime: 'Socket.io events available'
     },
@@ -313,9 +322,9 @@ app.get('/health', async (req, res) => {
   try {
     await prisma.$connect();
     const sessionCount = await prisma.session.count();
-    
-    res.json({ 
-      status: 'healthy', 
+
+    res.json({
+      status: 'healthy',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       memory: process.memoryUsage(),
@@ -331,10 +340,7 @@ app.get('/health', async (req, res) => {
     });
   } catch (error) {
     console.error("❌ [HEALTH] Error de conexión con DB:", error);
-    res.status(500).json({
-      status: 'unhealthy',
-      error: error.message
-    });
+    res.status(500).json({ status: 'unhealthy', error: error.message });
   }
 });
 
@@ -350,11 +356,7 @@ app.post('/api/sessions', async (req, res) => {
         sessionId: sessionId,
         merchantId: req.body.merchant_id || 'default_merchant'
       },
-      include: {
-        participants: true,
-        items: true,
-        payments: true
-      }
+      include: { participants: true, items: true, payments: true }
     });
 
     // 🔄 REAL-TIME: Inicializar tracking de sesión
@@ -375,8 +377,7 @@ app.post('/api/sessions', async (req, res) => {
     });
 
   } catch (error) {
-    console.error("🔥 [ERROR /api/sessions] No se pudo crear la sesión:");
-    console.error(error);
+    console.error("🔥 [ERROR /api/sessions] No se pudo crear la sesión:", error);
     res.status(500).json({
       success: false,
       message: error.message,
@@ -390,11 +391,7 @@ app.get('/api/sessions/:sessionId', async (req, res) => {
     console.log(`📡 [GET /api/sessions/${req.params.sessionId}]`);
     const session = await prisma.session.findUnique({
       where: { sessionId: req.params.sessionId },
-      include: {
-        participants: true,
-        items: true,
-        payments: true
-      }
+      include: { participants: true, items: true, payments: true }
     });
 
     if (!session) {
@@ -402,10 +399,8 @@ app.get('/api/sessions/:sessionId', async (req, res) => {
       return res.status(404).json({ error: 'Session not found' });
     }
 
-    // 🔄 REAL-TIME: Incluir info de usuarios conectados
     const connectedUsers = activeSessions.get(req.params.sessionId)?.users.size || 0;
-    
-    // Parsear assignees antes de devolver
+
     const sessionWithParsedAssignees = {
       ...session,
       items: session.items.map(item => ({
@@ -413,7 +408,7 @@ app.get('/api/sessions/:sessionId', async (req, res) => {
         assignees: parseAssignees(item.assignees)
       }))
     };
-    
+
     res.json({
       ...sessionWithParsedAssignees,
       realtime: {
@@ -427,18 +422,20 @@ app.get('/api/sessions/:sessionId', async (req, res) => {
   }
 });
 
-// 🔄 MEJORADO: Join con real-time broadcast
+// 🔄 MEJORADO: Join con real-time broadcast (wallet normalizada)
 app.post('/api/sessions/:sessionId/join', async (req, res) => {
   try {
     console.log(`👤 [JOIN SESSION] Usuario intentando unirse a: ${req.params.sessionId}`);
     console.log(`📥 [JOIN PAYLOAD] Datos recibidos:`, req.body);
-    
+
     const participant = await prisma.participant.create({
       data: {
         sessionId: req.params.sessionId,
         userId: req.body.user_id || 'user_' + Date.now(),
         name: req.body.name || null,
-        walletAddress: req.body.wallet_address || null,
+        walletAddress: req.body.wallet_address
+          ? String(req.body.wallet_address).toLowerCase().trim()
+          : null,
         addedBy: req.body.added_by || req.body.user_id,
         isOperator: req.body.is_operator || false
       }
@@ -446,15 +443,11 @@ app.post('/api/sessions/:sessionId/join', async (req, res) => {
 
     await prisma.session.update({
       where: { sessionId: req.params.sessionId },
-      data: { 
-        participantsCount: { increment: 1 },
-        updatedAt: new Date()
-      }
+      data: { participantsCount: { increment: 1 }, updatedAt: new Date() }
     });
 
     console.log(`✅ [JOIN SUCCESS] Participante creado:`, participant);
 
-    // 🔄 REAL-TIME: Broadcast del nuevo participante
     await broadcastSessionUpdate(req.params.sessionId, 'participant-joined', {
       participant,
       message: `${participant.name || participant.userId} se unió a la sesión`
@@ -465,45 +458,57 @@ app.post('/api/sessions/:sessionId/join', async (req, res) => {
       include: { participants: true, items: true }
     });
 
-    res.json({
-      success: true,
-      participant,
-      session
-    });
+    res.json({ success: true, participant, session });
   } catch (error) {
     console.error("🔥 [ERROR /join]", error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// 🔄 NUEVO: Actualizar wallet de un participante ya unido
+// 🔄 TOLERANTE: crear/actualizar participante al sincronizar wallet
 app.put('/api/sessions/:sessionId/participants/:userId/wallet', async (req, res) => {
   try {
     const { sessionId, userId } = req.params;
-    const { walletAddress } = req.body;
+    const { walletAddress, name } = req.body;
 
     if (!walletAddress) {
       return res.status(400).json({ error: "Wallet address requerido" });
     }
 
-    // Buscar participante en la sesión
-    const participant = await prisma.participant.findFirst({
-      where: { sessionId, userId }
-    });
+    let participant = await prisma.participant.findFirst({ where: { sessionId, userId } });
 
+    // Si no existe, crear
     if (!participant) {
-      return res.status(404).json({ error: "Participant not found" });
+      participant = await prisma.participant.create({
+        data: {
+          sessionId,
+          userId,
+          name: name || null,
+          walletAddress: String(walletAddress).toLowerCase().trim(),
+          addedBy: userId,
+          isOperator: false
+        }
+      });
+
+      await prisma.session.update({
+        where: { sessionId },
+        data: { participantsCount: { increment: 1 }, updatedAt: new Date() }
+      });
+
+      await broadcastSessionUpdate(sessionId, 'participant-joined', {
+        participant,
+        message: `${participant.name || participant.userId} se unió a la sesión`
+      });
     }
 
     // Actualizar wallet
     const updated = await prisma.participant.update({
       where: { id: participant.id },
-      data: { walletAddress }
+      data: { walletAddress: String(walletAddress).toLowerCase().trim() }
     });
 
     console.log(`🔗 [WALLET UPDATED] ${userId} → ${walletAddress}`);
 
-    // Broadcast en tiempo real
     await broadcastSessionUpdate(sessionId, 'wallet-updated', {
       participant: updated,
       message: `${updated.name || updated.userId} conectó su wallet`
@@ -529,7 +534,7 @@ app.post('/api/sessions/:sessionId/items', async (req, res) => {
 
     if (isNaN(amount) || amount <= 0) {
       console.warn("⚠️ Monto inválido recibido:", req.body.amount);
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: "El monto debe ser un número válido mayor a 0",
         received: req.body.amount,
         processed: amount
@@ -564,21 +569,16 @@ app.post('/api/sessions/:sessionId/items', async (req, res) => {
 
     const updatedSession = await prisma.session.update({
       where: { sessionId: req.params.sessionId },
-      data: {
-        totalAmount: newTotal,
-        updatedAt: new Date()
-      },
+      data: { totalAmount: newTotal, updatedAt: new Date() },
       include: { participants: true, items: true }
     });
 
-    // ✨ AUTO-CALCULAR SPLITS cuando se agrega un item
     let splits = null;
     if (updatedSession.participants.length > 0) {
       splits = SplitEngine.calculateSplits(updatedSession, SplitMethods.PROPORTIONAL);
       console.log(`🧮 [AUTO-SPLIT] Calculado automáticamente para ${updatedSession.participants.length} participantes`);
     }
 
-    // 🔄 REAL-TIME: Broadcast del nuevo item
     await broadcastSessionUpdate(req.params.sessionId, 'item-added', {
       item,
       newTotal: updatedSession.totalAmount,
@@ -588,12 +588,7 @@ app.post('/api/sessions/:sessionId/items', async (req, res) => {
 
     res.json({
       success: true,
-      item: {
-        ...item,
-        amount: Number(item.amount),
-        tax: Number(item.tax),
-        tip: Number(item.tip)
-      },
+      item: { ...item, amount: Number(item.amount), tax: Number(item.tax), tip: Number(item.tip) },
       session: updatedSession,
       splits,
       debug: {
@@ -605,15 +600,14 @@ app.post('/api/sessions/:sessionId/items', async (req, res) => {
 
   } catch (error) {
     console.error("🔥 [ERROR /items]", error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
 
-// Reemplazar el endpoint PUT /api/sessions/:sessionId/items/:itemId/assignees en server.js
-
+// PUT assignees (update)
 app.put('/api/sessions/:sessionId/items/:itemId/assignees', async (req, res) => {
   try {
     const { sessionId, itemId } = req.params;
@@ -621,62 +615,38 @@ app.put('/api/sessions/:sessionId/items/:itemId/assignees', async (req, res) => 
 
     console.log(`📝 [UPDATE ASSIGNEES] Item ${itemId} → Sesión ${sessionId}`);
     console.log(`👥 [ASSIGNEES] Nuevas asignaciones:`, assignees);
-    console.log(`🔍 [DEBUG] itemId type:`, typeof itemId, 'value:', itemId);
 
-    // Validar que itemId no esté vacío
     if (!itemId || itemId.trim() === '') {
       console.error(`❌ [ERROR] itemId vacío o inválido: ${itemId}`);
       return res.status(400).json({ error: `itemId inválido: ${itemId}` });
     }
 
-    // Verificar que el item existe y pertenece a la sesión
-    const existingItem = await prisma.item.findFirst({
-      where: {
-        id: itemId,  // Usar itemId como string directamente
-        sessionId: sessionId
-      }
-    });
-
+    const existingItem = await prisma.item.findFirst({ where: { id: itemId, sessionId } });
     if (!existingItem) {
       console.error(`❌ [ERROR] Item ${itemId} no encontrado en sesión ${sessionId}`);
       return res.status(404).json({ error: `Item ${itemId} no encontrado en esta sesión` });
     }
 
-    console.log(`✅ [FOUND] Item existente:`, existingItem);
-
-    // Actualizar item en la base de datos
     const updatedItem = await prisma.item.update({
-      where: { 
-        id: itemId  // Usar itemId como string directamente
-      },
-      data: {
-        assignees: JSON.stringify(assignees || [])
-      }
+      where: { id: itemId },
+      data: { assignees: JSON.stringify(assignees || []) }
     });
 
     console.log(`✅ [UPDATED] Item actualizado:`, updatedItem);
 
-    // Obtener sesión completa actualizada
     const session = await prisma.session.findUnique({
       where: { sessionId },
-      include: {
-        participants: true,
-        items: true
-      }
+      include: { participants: true, items: true }
     });
 
-    if (!session) {
-      return res.status(404).json({ error: 'Session not found' });
-    }
+    if (!session) return res.status(404).json({ error: 'Session not found' });
 
-    // ✨ AUTO-CALCULAR SPLITS cuando se cambian asignaciones
     let splits = null;
     if (session.participants.length > 0) {
       splits = SplitEngine.calculateSplits(session, SplitMethods.PROPORTIONAL);
       console.log(`🧮 [AUTO-SPLIT] Recalculado después de cambiar asignaciones`);
     }
 
-    // 🔄 REAL-TIME: Broadcast del cambio de asignaciones
     await broadcastSessionUpdate(sessionId, 'item-assignees-updated', {
       item: updatedItem,
       previousAssignees: req.body.previousAssignees || [],
@@ -684,23 +654,17 @@ app.put('/api/sessions/:sessionId/items/:itemId/assignees', async (req, res) => 
       message: `Asignaciones actualizadas para ${updatedItem.name}`
     });
 
-    res.json({
-      success: true,
-      item: updatedItem,
-      session,
-      splits
-    });
-
+    res.json({ success: true, item: updatedItem, session, splits });
   } catch (error) {
     console.error("🔥 [ERROR /items/:id/assignees]", error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
 
-// 🔄 MEJORADO: Calcular splits con real-time
+// 🔄 Calcular splits con real-time
 app.post('/api/sessions/:sessionId/calculate-splits', async (req, res) => {
   try {
     const { sessionId } = req.params;
@@ -710,33 +674,20 @@ app.post('/api/sessions/:sessionId/calculate-splits', async (req, res) => {
 
     const session = await prisma.session.findUnique({
       where: { sessionId },
-      include: {
-        participants: true,
-        items: true
-      }
+      include: { participants: true, items: true }
     });
 
-    if (!session) {
-      return res.status(404).json({ error: 'Session not found' });
-    }
+    if (!session) return res.status(404).json({ error: 'Session not found' });
 
     const splits = SplitEngine.calculateSplits(session, method, options);
 
-    // 🔄 REAL-TIME: Broadcast de los splits calculados
     await broadcastSessionUpdate(sessionId, 'splits-calculated', {
       splits,
       method,
       message: `División calculada usando método ${method}`
     });
 
-    res.json({
-      success: true,
-      splits,
-      session: {
-        ...session,
-        splits
-      }
-    });
+    res.json({ success: true, splits, session: { ...session, splits } });
 
   } catch (error) {
     console.error('🔥 [ERROR /calculate-splits]', error);
@@ -749,53 +700,29 @@ app.get('/api/sessions/:sessionId/splits', async (req, res) => {
   try {
     const session = await prisma.session.findUnique({
       where: { sessionId: req.params.sessionId },
-      include: {
-        participants: true,
-        items: true
-      }
+      include: { participants: true, items: true }
     });
 
-    if (!session) {
-      return res.status(404).json({ error: 'Session not found' });
-    }
+    if (!session) return res.status(404).json({ error: 'Session not found' });
 
-    // ✅ Parsear assignees de cada item antes de pasar al SplitEngine
-    const sessionWithParsedItems = {
-      ...session,
-      items: session.items.map(item => ({
-        ...item,
-        assignees: parseAssignees(item.assignees)
-      }))
-    };
-
-    const splits = SplitEngine.calculateSplits(sessionWithParsedItems, SplitMethods.PROPORTIONAL);
-
-    res.json({
-      success: true,
-      splits
-    });
-
+    const splits = SplitEngine.calculateSplits(session, SplitMethods.PROPORTIONAL);
+    res.json({ success: true, splits });
   } catch (error) {
     console.error('🔥 [ERROR /splits]', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-
-// 🔄 NUEVO: Endpoint para obtener usuarios conectados en tiempo real
+// 🔄 NUEVO: Endpoint para usuarios conectados
 app.get('/api/sessions/:sessionId/connected-users', (req, res) => {
   const sessionData = activeSessions.get(req.params.sessionId);
-  
+
   if (!sessionData) {
-    return res.json({
-      connectedUsers: 0,
-      users: [],
-      isActive: false
-    });
+    return res.json({ connectedUsers: 0, users: [], isActive: false });
   }
 
   const connectedUsersList = Array.from(userSessions.entries())
-    .filter(([socketId, userData]) => userData.sessionId === req.params.sessionId)
+    .filter(([_, userData]) => userData.sessionId === req.params.sessionId)
     .map(([socketId, userData]) => ({
       socketId,
       userId: userData.userId,
@@ -811,90 +738,81 @@ app.get('/api/sessions/:sessionId/connected-users', (req, res) => {
   });
 });
 
-// Utility function para formatear moneda
-const formatCurrency = (amount) => {
-  return new Intl.NumberFormat('es-AR', { 
-    style: 'currency', 
-    currency: 'ARS',
-    minimumFractionDigits: 2 
-  }).format(amount);
-};
+// Utility: moneda
+const formatCurrency = (amount) =>
+  new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(amount);
 
-// Endpoint para testing del Split Engine
-app.post('/api/test/splits', (req, res) => {
-  const { testData, method = SplitMethods.PROPORTIONAL, options = {} } = req.body;
-  
-  const defaultTestData = {
-    totalAmount: 100,
-    participants: [
-      { id: 1, userId: 'user1', name: 'Alice' },
-      { id: 2, userId: 'user2', name: 'Bob' },
-      { id: 3, userId: 'user3', name: 'Charlie' }
-    ],
-    items: [
-      { id: 1, name: 'Pizza', amount: 60, assignees: [1, 2] },
-      { id: 2, name: 'Bebidas', amount: 40, assignees: [1, 2, 3] }
-    ]
-  };
+// 🔐 NUEVO: Make payment (busca por wallet O userId y guarda participantId)
+app.post('/api/sessions/:sessionId/pay', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    let { user_id, wallet_address, amount, to_address, token_address } = req.body;
 
-  const sessionData = testData || defaultTestData;
-  const result = SplitEngine.calculateSplits(sessionData, method, options);
+    wallet_address = wallet_address ? String(wallet_address).toLowerCase().trim() : null;
+    user_id = user_id ? String(user_id).trim() : null;
+    amount = Number(amount ?? 0);
 
-  res.json({
-    message: 'Split Engine Test',
-    input: sessionData,
-    method,
-    options,
-    result
-  });
-});
+    console.log('💳 [PAY] payload =', { sessionId, user_id, wallet_address, amount });
 
-// Endpoint de testing de números
-app.post('/api/test/numbers', (req, res) => {
-  const testCases = [
-    '2.000',
-    '2.000,50',
-    '2000.50',
-    '1.234.567',
-    '500',
-    '10,99',
-    '1.500.000,75'
-  ];
+    const session = await prisma.session.findUnique({ where: { sessionId } });
+    if (!session) return res.status(404).json({ error: 'Session not found' });
 
-  const results = testCases.map(test => ({
-    input: test,
-    output: sanitizeNumber(test),
-    formatted: formatCurrency(sanitizeNumber(test))
-  }));
-
-  if (req.body.test_value) {
-    results.push({
-      input: req.body.test_value,
-      output: sanitizeNumber(req.body.test_value),
-      formatted: formatCurrency(sanitizeNumber(req.body.test_value))
+    const participant = await prisma.participant.findFirst({
+      where: {
+        sessionId,
+        OR: [
+          wallet_address ? { walletAddress: wallet_address } : undefined,
+          user_id ? { userId: user_id } : undefined
+        ].filter(Boolean)
+      }
     });
-  }
 
-  res.json({
-    message: 'Pruebas de sanitización de números',
-    results
-  });
+    if (!participant) {
+      console.warn('⚠️ [PAY] Participant not found', { sessionId, user_id, wallet_address });
+      return res.status(404).json({
+        error: 'Participant not found',
+        debug: { sessionId, tried_userId: user_id, tried_wallet: wallet_address }
+      });
+    }
+
+    // TODO: Invocar blockchain y obtener txHash real
+    const txHash = '0x' + Math.random().toString(16).slice(2); // mock
+
+    const payment = await prisma.payment.create({
+      data: {
+        sessionId,
+        participantId: participant.id,
+        fromAddress: wallet_address ?? 'unknown',
+        toAddress: (to_address || process.env.MERCHANT_WALLET || 'merchant').toLowerCase(),
+        amount,
+        tokenAddress: (token_address || process.env.TOKEN_ADDRESS || 'native').toLowerCase(),
+        status: 'success',
+        txHash
+      }
+    });
+
+    await broadcastSessionUpdate(sessionId, 'payment-made', {
+      payment,
+      message: `${participant.name || participant.userId} pagó ${formatCurrency(amount)}`
+    });
+
+    res.json({ success: true, txHash, payment, participantId: participant.id });
+  } catch (error) {
+    console.error('🔥 [ERROR /pay]', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // 🔄 SOCKET.IO REAL-TIME MEJORADO
 io.on('connection', (socket) => {
   console.log(`🔌 Usuario conectado: ${socket.id}`);
-  
-  // Usuario se une a una sesión
+
   socket.on('join-session', async (data) => {
     const { sessionId, userId, userName } = data;
-    
     console.log(`👥 Usuario ${socket.id} (${userName || userId}) se unió a sesión ${sessionId}`);
-    
-    // Join al room de Socket.io
+
     socket.join(sessionId);
-    
-    // Actualizar tracking
+
     if (!activeSessions.has(sessionId)) {
       activeSessions.set(sessionId, {
         users: new Set(),
@@ -902,78 +820,65 @@ io.on('connection', (socket) => {
         createdAt: new Date()
       });
     }
-    
+
     const sessionData = activeSessions.get(sessionId);
     sessionData.users.add(socket.id);
     sessionData.lastActivity = new Date();
-    
+
     userSessions.set(socket.id, {
       sessionId,
       userId: userId || socket.id,
       userName: userName || `User ${socket.id.slice(-4)}`,
       connectedAt: new Date()
     });
-    
-    // Notificar a otros usuarios de la sesión
+
     socket.to(sessionId).emit('user-connected', {
       userId: userId || socket.id,
       userName: userName || `User ${socket.id.slice(-4)}`,
       connectedUsers: sessionData.users.size,
       timestamp: new Date().toISOString()
     });
-    
-    // Enviar estado actual al usuario recién conectado
+
     try {
       const session = await prisma.session.findUnique({
         where: { sessionId },
-        include: {
-          participants: true,
-          items: true
-        }
+        include: { participants: true, items: true }
       });
-      
+
       if (session && session.participants.length > 0) {
         const splits = SplitEngine.calculateSplits(session, SplitMethods.PROPORTIONAL);
-        socket.emit('session-sync', {
-          session,
-          splits,
-          connectedUsers: sessionData.users.size
-        });
+        socket.emit('session-sync', { session, splits, connectedUsers: sessionData.users.size });
       }
     } catch (error) {
       console.error('🔥 [SOCKET ERROR] Error sincronizando sesión:', error);
     }
   });
-  
-  // Usuario sale de sesión
+
   socket.on('leave-session', (sessionId) => {
     console.log(`👋 Usuario ${socket.id} salió de sesión ${sessionId}`);
-    
     socket.leave(sessionId);
-    
+
     const userData = userSessions.get(socket.id);
     if (userData && activeSessions.has(sessionId)) {
       const sessionData = activeSessions.get(sessionId);
       sessionData.users.delete(socket.id);
-      
+
       socket.to(sessionId).emit('user-disconnected', {
         userId: userData.userId,
         userName: userData.userName,
         connectedUsers: sessionData.users.size,
         timestamp: new Date().toISOString()
       });
-      
-      // Limpiar sesión si no hay usuarios
+
       if (sessionData.users.size === 0) {
         activeSessions.delete(sessionId);
         console.log(`🧹 Sesión ${sessionId} limpiada (sin usuarios)`);
       }
     }
-    
+
     userSessions.delete(socket.id);
   });
-  
-  // Typing indicators para colaboración
+
   socket.on('typing-start', (data) => {
     const userData = userSessions.get(socket.id);
     if (userData) {
@@ -985,7 +890,7 @@ io.on('connection', (socket) => {
       });
     }
   });
-  
+
   socket.on('typing-stop', () => {
     const userData = userSessions.get(socket.id);
     if (userData) {
@@ -995,57 +900,54 @@ io.on('connection', (socket) => {
       });
     }
   });
-  
-  // Manejo de desconexión
+
   socket.on('disconnect', () => {
     console.log(`❌ Usuario desconectado: ${socket.id}`);
-    
+
     const userData = userSessions.get(socket.id);
     if (userData && activeSessions.has(userData.sessionId)) {
       const sessionData = activeSessions.get(userData.sessionId);
       sessionData.users.delete(socket.id);
-      
+
       socket.to(userData.sessionId).emit('user-disconnected', {
         userId: userData.userId,
         userName: userData.userName,
         connectedUsers: sessionData.users.size,
         timestamp: new Date().toISOString()
       });
-      
-      // Limpiar sesión si no hay usuarios
+
       if (sessionData.users.size === 0) {
         activeSessions.delete(userData.sessionId);
         console.log(`🧹 Sesión ${userData.sessionId} limpiada (sin usuarios)`);
       }
     }
-    
+
     userSessions.delete(socket.id);
   });
-  
-  // Heartbeat para mantener conexión
+
   socket.on('ping', () => {
     socket.emit('pong', { timestamp: new Date().toISOString() });
   });
 });
 
-
 // 404 handler
 app.use((req, res) => {
-  res.status(404).json({ 
+  res.status(404).json({
     error: 'Endpoint not found',
     path: req.originalUrl,
     method: req.method,
     available_endpoints: [
       'GET /',
-      'GET /health', 
+      'GET /health',
       'POST /api/sessions',
       'GET /api/sessions/:id',
       'GET /api/sessions/:id/connected-users',
       'POST /api/sessions/:id/join',
       'POST /api/sessions/:id/items',
-      'PUT /api/sessions/:id/items/:itemId/assignees', // ← NUEVO
+      'PUT /api/sessions/:id/items/:itemId/assignees',
       'GET /api/sessions/:id/splits',
       'POST /api/sessions/:id/calculate-splits',
+      'POST /api/sessions/:id/pay',
       'POST /api/test/numbers',
       'POST /api/test/splits'
     ]
@@ -1055,13 +957,10 @@ app.use((req, res) => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('🛑 SIGTERM received, shutting down gracefully');
-  
-  // Notificar a todos los usuarios conectados
   io.emit('server-shutdown', {
     message: 'Servidor cerrándose, reconectando automáticamente...',
     timestamp: new Date().toISOString()
   });
-  
   await prisma.$disconnect();
   server.close(() => {
     console.log('Process terminated');
@@ -1072,7 +971,6 @@ process.on('SIGTERM', async () => {
 setInterval(() => {
   const now = new Date();
   const inactiveThreshold = 30 * 60 * 1000; // 30 minutos
-  
   for (const [sessionId, sessionData] of activeSessions.entries()) {
     if (sessionData.users.size === 0 && (now - sessionData.lastActivity) > inactiveThreshold) {
       activeSessions.delete(sessionId);
@@ -1101,6 +999,7 @@ server.listen(PORT, () => {
   console.log('   POST /api/sessions/:id/items  - Agregar item');
   console.log('   GET  /api/sessions/:id/splits - Obtener splits');
   console.log('   POST /api/sessions/:id/calculate-splits - Calcular splits');
+  console.log('   POST /api/sessions/:id/pay    - Pagar (userId o wallet)');
   console.log('   POST /api/test/numbers        - Test números');
   console.log('   POST /api/test/splits         - Test splits');
   console.log('');
@@ -1112,19 +1011,16 @@ server.listen(PORT, () => {
   console.log('   ping/pong        → Heartbeat para conexión');
   console.log('');
   console.log('📡 Real-time Updates automáticos:');
-  console.log('   session-updated  → Cambios en la sesión');
-  console.log('   participant-joined → Nuevo participante');
-  console.log('   item-added       → Nuevo item agregado');
-  console.log('   splits-calculated → División calculada');
-  console.log('   user-connected   → Usuario se conectó');
-  console.log('   user-disconnected → Usuario se desconectó');
-  console.log('   user-typing      → Usuario escribiendo');
+  console.log('   session-updated      → Cambios en la sesión');
+  console.log('   participant-joined   → Nuevo participante');
+  console.log('   item-added           → Nuevo item agregado');
+  console.log('   payment-made         → Pago realizado');
+  console.log('   splits-calculated    → División calculada');
+  console.log('   user-connected       → Usuario se conectó');
+  console.log('   user-disconnected    → Usuario se desconectó');
+  console.log('   user-typing          → Usuario escribiendo');
   console.log('');
-  console.log('🧮 Métodos de división soportados:');
-  console.log('   equal        → División igual entre todos');
-  console.log('   proportional → División por items consumidos');
-  console.log('   weighted     → División con pesos personalizados');
-  console.log('   custom       → Montos específicos por persona');
+  console.log('🧮 Métodos de división soportados: equal | proportional | weighted | custom');
   console.log('');
   console.log('🎯 Ready para recibir requests y conexiones real-time!');
 });

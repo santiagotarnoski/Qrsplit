@@ -1,4 +1,6 @@
-// Tipos que coinciden con el smart contract Cairo
+// src/services/contractService.ts
+
+// Tipos que usa la UI (los mantengo)
 export interface SessionInfo {
   session_id: string;
   merchant: string;
@@ -19,211 +21,273 @@ export interface PaymentStatus {
 }
 
 export interface ParticipantPayment {
-  participant: string;
+  participant: string; // usaremos wallet o userId visible
   amount: number;
   has_paid: boolean;
 }
 
-// Simulación local del smart contract
-class QRSplitContractService {
-  private sessions: Map<string, SessionInfo> = new Map();
-  private participantAmounts: Map<string, number> = new Map();
-  private participantPayments: Map<string, boolean> = new Map();
-  private sessionParticipants: Map<string, string[]> = new Map();
+// ======================
+// Config & helpers HTTP
+// ======================
+const API_BASE =
+  // Vite
+  (typeof import.meta !== "undefined" && (import.meta as any)?.env?.VITE_API_URL) ||
+  // Next.js
+  process.env.NEXT_PUBLIC_API_URL ||
+  // fallback local
+  "http://localhost:3000";
 
-  // Simular create_session del smart contract
+async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+    ...init,
+  });
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try {
+      const data = await res.json();
+      if (data?.error) msg = data.error;
+    } catch {}
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+// Tipos del backend (mínimos necesarios)
+type DbSession = {
+  sessionId: string;
+  merchantId: string;
+  totalAmount: number;
+  participantsCount: number;
+  createdAt: string;
+  status: string; // 'active' | '...'
+  participants: Array<{
+    id: string;
+    userId: string;
+    name: string | null;
+    walletAddress: string | null;
+  }>;
+  items: any[];
+  payments?: Array<{
+    id: string;
+    sessionId: string;
+    participantId: string | null;
+    fromAddress: string;
+    amount: number;
+    status: string;
+  }>;
+};
+
+type SplitsResponse = {
+  success: boolean;
+  splits: {
+    method: string;
+    totalAmount: number;
+    participants: Array<{
+      participantId: string;
+      userId: string;
+      name?: string | null;
+      amount: number; // lo que debe ese participante
+      items?: Array<{ id: string; name: string; amount: number; share: number }>;
+    }>;
+  };
+};
+
+export class QRSplitContractService {
+  // =========================
+  // createSession: crea en DB
+  // =========================
   async createSession(
     sessionId: string,
     merchantId: string,
-    merchantAddress: string,
-    totalAmount: number
+    merchantAddress: string, // no se usa en backend, lo dejamos por compatibilidad
+    totalAmount: number      // el total real se forma con items; lo conservamos por compatibilidad
   ): Promise<{ success: boolean; txHash?: string; error?: string }> {
     try {
-      console.log('📝 [CONTRACT] Creating session:', { sessionId, merchantId, totalAmount });
-      
-      // Verificar que la sesión no exista
-      if (this.sessions.has(sessionId)) {
-        return { success: false, error: 'Session already exists' };
-      }
+      // En el backend, el sessionId lo genera el server. Creamos y devolvemos el ID real.
+      const r = await api<{
+        success: true;
+        session_id: string;
+        session: DbSession;
+      }>("/api/sessions", {
+        method: "POST",
+        body: JSON.stringify({ merchant_id: merchantId }),
+      });
 
-      // Crear sesión
-      const session: SessionInfo = {
-        session_id: sessionId,
-        merchant: merchantAddress,
-        merchant_id: merchantId,
-        total_amount: totalAmount,
-        participants_count: 0,
-        payments_received: 0,
-        created_at: Date.now() / 1000,
-        is_active: true,
-        is_completed: false,
-      };
-
-      this.sessions.set(sessionId, session);
-      this.sessionParticipants.set(sessionId, []);
-
-      console.log('✅ [CONTRACT] Session created:', session);
-      
-      // Simular hash de transacción
+      // Simulamos un txHash para la UI (el backend no devuelve uno real aquí)
       const mockTxHash = `0x${Math.random().toString(16).substring(2, 18)}`;
-      
+
       return { success: true, txHash: mockTxHash };
-    } catch (error) {
-      console.error('❌ [CONTRACT] Error creating session:', error);
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    } catch (e: any) {
+      return { success: false, error: e.message || "Create session failed" };
     }
   }
 
-  // Simular join_session del smart contract
+  // ==================================
+  // joinSession: crea/une participante
+  // ==================================
   async joinSession(
     sessionId: string,
     participantAddress: string,
-    amountOwed: number
+    amountOwed: number // no lo usa el backend aquí; lo dejamos para la firma
   ): Promise<{ success: boolean; txHash?: string; error?: string }> {
     try {
-      console.log('🚀 [CONTRACT] Joining session:', { sessionId, participantAddress, amountOwed });
+      const wallet = (participantAddress || "").toLowerCase().trim();
 
-      const session = this.sessions.get(sessionId);
-      if (!session) {
-        return { success: false, error: 'Session not found' };
-      }
+      await api(`/api/sessions/${encodeURIComponent(sessionId)}/join`, {
+        method: "POST",
+        body: JSON.stringify({
+          user_id: wallet,         // usamos la wallet como user_id para trazabilidad 1:1
+          name: null,
+          wallet_address: wallet,  // MUY IMPORTANTE: lowercase
+        }),
+      });
 
-      if (!session.is_active) {
-        return { success: false, error: 'Session is not active' };
-      }
-
-      // Verificar que el participante no exista ya
-      const participantKey = `${sessionId}-${participantAddress}`;
-      if (this.participantAmounts.has(participantKey)) {
-        return { success: false, error: 'Participant already exists' };
-      }
-
-      // Agregar participante
-      this.participantAmounts.set(participantKey, amountOwed);
-      this.participantPayments.set(participantKey, false);
-      
-      const participants = this.sessionParticipants.get(sessionId) || [];
-      participants.push(participantAddress);
-      this.sessionParticipants.set(sessionId, participants);
-
-      // Actualizar sesión
-      session.participants_count += 1;
-      this.sessions.set(sessionId, session);
-
-      console.log('✅ [CONTRACT] Participant joined:', { sessionId, participantAddress });
-      
       const mockTxHash = `0x${Math.random().toString(16).substring(2, 18)}`;
       return { success: true, txHash: mockTxHash };
-    } catch (error) {
-      console.error('❌ [CONTRACT] Error joining session:', error);
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    } catch (e: any) {
+      return { success: false, error: e.message || "Join session failed" };
     }
   }
 
-  // Simular make_payment del smart contract
+  // =========================================================
+  // makePayment: llama al backend /pay (calcula amount si falta)
+  // =========================================================
   async makePayment(
     sessionId: string,
-    participantAddress: string
+    participantAddress: string,
+    amountOverride?: number // opcional: si la UI ya sabe el monto
   ): Promise<{ success: boolean; txHash?: string; error?: string }> {
     try {
-      console.log('💰 [CONTRACT] Making payment:', { sessionId, participantAddress });
+      const wallet = (participantAddress || "").toLowerCase().trim();
 
-      const session = this.sessions.get(sessionId);
-      if (!session) {
-        return { success: false, error: 'Session not found' };
+      // 1) Traer la sesión para encontrar el participant.id
+      const session = await api<DbSession>(`/api/sessions/${encodeURIComponent(sessionId)}`);
+      const participant = session.participants.find(
+        (p) => (p.walletAddress || "").toLowerCase() === wallet
+      );
+
+      if (!participant) {
+        return { success: false, error: "Participant not found (wallet no registrada en la sesión)" };
       }
 
-      if (!session.is_active) {
-        return { success: false, error: 'Session is not active' };
+      // 2) Calcular amount si no viene
+      let amount = amountOverride ?? 0;
+      if (amount === 0) {
+        const splits = await api<SplitsResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/splits`);
+        const mine = splits.splits.participants.find((sp) => sp.participantId === participant.id);
+        amount = mine?.amount ?? 0;
       }
 
-      const participantKey = `${sessionId}-${participantAddress}`;
-      const amountOwed = this.participantAmounts.get(participantKey);
-      if (!amountOwed) {
-        return { success: false, error: 'Participant not found' };
+      if (!amount || amount <= 0) {
+        return { success: false, error: "Monto a pagar no determinado" };
       }
 
-      const hasPaid = this.participantPayments.get(participantKey);
-      if (hasPaid) {
-        return { success: false, error: 'Participant already paid' };
-      }
+      // 3) Pagar
+      const payRes = await api<{
+        success: boolean;
+        txHash: string;
+      }>(`/api/sessions/${encodeURIComponent(sessionId)}/pay`, {
+        method: "POST",
+        body: JSON.stringify({
+          user_id: participant.userId,
+          wallet_address: wallet,
+          amount,
+          // to_address y token_address pueden omitirse: el backend tiene defaults
+        }),
+      });
 
-      // Marcar como pagado
-      this.participantPayments.set(participantKey, true);
-
-      // Actualizar pagos recibidos
-      session.payments_received += amountOwed;
-      this.sessions.set(sessionId, session);
-
-      console.log('✅ [CONTRACT] Payment made:', { sessionId, participantAddress, amount: amountOwed });
-      
-      const mockTxHash = `0x${Math.random().toString(16).substring(2, 18)}`;
-      return { success: true, txHash: mockTxHash };
-    } catch (error) {
-      console.error('❌ [CONTRACT] Error making payment:', error);
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      return { success: true, txHash: payRes.txHash };
+    } catch (e: any) {
+      return { success: false, error: e.message || "Payment failed" };
     }
   }
 
-  // Simular execute_group_payment del smart contract
+  // ===========================================
+  // executeGroupPayment: (no hay endpoint aún)
+  // ===========================================
   async executeGroupPayment(
-    sessionId: string
+    _sessionId: string
   ): Promise<{ success: boolean; txHash?: string; error?: string }> {
+    // Si más adelante creás el endpoint, cambiamos esto.
+    const mockTxHash = `0x${Math.random().toString(16).substring(2, 18)}`;
+    return { success: true, txHash: mockTxHash };
+  }
+
+  // ===============
+  // Lecturas (read)
+  // ===============
+  async getSession(sessionId: string): Promise<SessionInfo | null> {
     try {
-      console.log('⚡ [CONTRACT] Executing group payment:', { sessionId });
-
-      const session = this.sessions.get(sessionId);
-      if (!session) {
-        return { success: false, error: 'Session not found' };
-      }
-
-      if (!session.is_active) {
-        return { success: false, error: 'Session is not active' };
-      }
-
-      // Verificar que todos hayan pagado
-      const paymentStatus = await this.getPaymentStatus(sessionId);
-      if (!paymentStatus.is_fully_paid) {
-        return { success: false, error: 'Not all participants have paid' };
-      }
-
-      // Marcar sesión como completada
-      session.is_active = false;
-      session.is_completed = true;
-      this.sessions.set(sessionId, session);
-
-      console.log('✅ [CONTRACT] Group payment executed:', { sessionId, total: session.payments_received });
-      
-      const mockTxHash = `0x${Math.random().toString(16).substring(2, 18)}`;
-      return { success: true, txHash: mockTxHash };
-    } catch (error) {
-      console.error('❌ [CONTRACT] Error executing group payment:', error);
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      const s = await api<DbSession>(`/api/sessions/${encodeURIComponent(sessionId)}`);
+      // Mapear al tipo que espera la UI
+      const info: SessionInfo = {
+        session_id: s.sessionId,
+        merchant: "", // no lo tenemos en la fila; podrías guardar merchant wallet en Session si querés
+        merchant_id: s.merchantId,
+        total_amount: s.totalAmount,
+        participants_count: s.participantsCount,
+        payments_received: (s.payments || [])
+          .filter((p) => p.status === "success")
+          .reduce((sum, p) => sum + (p.amount || 0), 0),
+        created_at: Math.floor(new Date(s.createdAt).getTime() / 1000),
+        is_active: s.status === "active",
+        is_completed: s.status === "completed",
+      };
+      return info;
+    } catch {
+      return null;
     }
   }
 
-  // Obtener información de sesión
-  async getSession(sessionId: string): Promise<SessionInfo | null> {
-    return this.sessions.get(sessionId) || null;
-  }
-
-  // Obtener cantidad adeudada por participante
   async getParticipantAmount(sessionId: string, participantAddress: string): Promise<number> {
-    const participantKey = `${sessionId}-${participantAddress}`;
-    return this.participantAmounts.get(participantKey) || 0;
+    try {
+      const wallet = (participantAddress || "").toLowerCase().trim();
+      const session = await api<DbSession>(`/api/sessions/${encodeURIComponent(sessionId)}`);
+      const participant = session.participants.find(
+        (p) => (p.walletAddress || "").toLowerCase() === wallet
+      );
+      if (!participant) return 0;
+
+      const splits = await api<SplitsResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/splits`);
+      const mine = splits.splits.participants.find((sp) => sp.participantId === participant.id);
+      return mine?.amount ?? 0;
+    } catch {
+      return 0;
+    }
   }
 
-  // Verificar si participante ya pagó
   async hasParticipantPaid(sessionId: string, participantAddress: string): Promise<boolean> {
-    const participantKey = `${sessionId}-${participantAddress}`;
-    return this.participantPayments.get(participantKey) || false;
+    try {
+      const wallet = (participantAddress || "").toLowerCase().trim();
+      const s = await api<DbSession>(`/api/sessions/${encodeURIComponent(sessionId)}`);
+      return (s.payments || []).some(
+        (p) => p.status === "success" && (p.fromAddress || "").toLowerCase() === wallet
+      );
+    } catch {
+      return false;
+    }
   }
 
-  // Obtener estado de pagos
   async getPaymentStatus(sessionId: string): Promise<PaymentStatus> {
-    const session = this.sessions.get(sessionId);
-    
-    if (!session) {
+    try {
+      const s = await api<DbSession>(`/api/sessions/${encodeURIComponent(sessionId)}`);
+      const total_participants = s.participantsCount;
+      const successPayments = (s.payments || []).filter((p) => p.status === "success");
+      const total_collected = successPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+
+      // cantidad de participantes que pagaron (distintos participantId)
+      const paid_participants = new Set(
+        successPayments.map((p) => p.participantId).filter(Boolean) as string[]
+      ).size;
+
+      return {
+        total_participants,
+        paid_participants,
+        total_collected,
+        is_fully_paid: total_participants > 0 && paid_participants === total_participants,
+      };
+    } catch {
       return {
         total_participants: 0,
         paid_participants: 0,
@@ -231,53 +295,45 @@ class QRSplitContractService {
         is_fully_paid: false,
       };
     }
-
-    const participants = this.sessionParticipants.get(sessionId) || [];
-    let paidCount = 0;
-
-    for (const participant of participants) {
-      const participantKey = `${sessionId}-${participant}`;
-      if (this.participantPayments.get(participantKey)) {
-        paidCount++;
-      }
-    }
-
-    return {
-      total_participants: session.participants_count,
-      paid_participants: paidCount,
-      total_collected: session.payments_received,
-      is_fully_paid: paidCount === session.participants_count && session.participants_count > 0,
-    };
   }
 
-  // Obtener todos los participantes de una sesión
   async getSessionParticipants(sessionId: string): Promise<ParticipantPayment[]> {
-    const participants = this.sessionParticipants.get(sessionId) || [];
-    
-    return participants.map(participant => {
-      const participantKey = `${sessionId}-${participant}`;
-      return {
-        participant,
-        amount: this.participantAmounts.get(participantKey) || 0,
-        has_paid: this.participantPayments.get(participantKey) || false,
-      };
-    });
+    try {
+      const [s, splits] = await Promise.all([
+        api<DbSession>(`/api/sessions/${encodeURIComponent(sessionId)}`),
+        api<SplitsResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/splits`),
+      ]);
+
+      const paidSet = new Set(
+        (s.payments || [])
+          .filter((p) => p.status === "success")
+          .map((p) => p.participantId)
+          .filter(Boolean) as string[]
+      );
+
+      return s.participants.map((p) => {
+        const match = splits.splits.participants.find((sp) => sp.participantId === p.id);
+        return {
+          participant: p.walletAddress || p.userId,
+          amount: match?.amount ?? 0,
+          has_paid: paidSet.has(p.id),
+        };
+      });
+    } catch {
+      return [];
+    }
   }
 
-  // Limpiar datos (para testing)
+  // Para mantener compatibilidad con la UI existente
   clearAllData() {
-    this.sessions.clear();
-    this.participantAmounts.clear();
-    this.participantPayments.clear();
-    this.sessionParticipants.clear();
-    console.log('🧹 [CONTRACT] All data cleared');
+    // No-op: ahora los datos viven en el backend
+    console.log("ℹ️ [CONTRACT] clearAllData(): no-op en modo backend");
   }
 }
 
-// Exportar instancia singleton
+// Exportar instancia
 export const contractService = new QRSplitContractService();
 
-// Función helper para simular delay de transacción
-export const simulateTransactionDelay = (ms: number = 2000): Promise<void> => {
-  return new Promise(resolve => setTimeout(resolve, ms));
-};
+// Utilidad: simular delay (la UI la usa para UX)
+export const simulateTransactionDelay = (ms: number = 2000): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));

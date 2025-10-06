@@ -1,5 +1,11 @@
 import { useState, useCallback } from 'react';
-import { contractService, simulateTransactionDelay, SessionInfo, PaymentStatus, ParticipantPayment } from '../services/contractService';
+import {
+  contractService,
+  simulateTransactionDelay,
+  SessionInfo,
+  PaymentStatus,
+  ParticipantPayment
+} from '../services/contractService';
 import { useWallet } from './useWallet';
 
 interface ContractState {
@@ -8,7 +14,6 @@ interface ContractState {
   lastTxHash: string | null;
 }
 
-// NUEVO: Interfaz para respuestas de contrato
 interface ContractResult {
   success: boolean;
   txHash?: string;
@@ -16,21 +21,16 @@ interface ContractResult {
 }
 
 interface UseContractReturn extends ContractState {
-  // Session management - MODIFICADO: ahora retornan ContractResult
   createSession: (sessionId: string, merchantId: string, merchantAddress: string, totalAmount: number) => Promise<ContractResult>;
   joinSession: (sessionId: string, participantAddress: string, amountOwed: number) => Promise<ContractResult>;
-  
-  // Payment functions - MODIFICADO: ahora retornan ContractResult
   makePayment: (sessionId: string, participantAddress: string) => Promise<ContractResult>;
   executeGroupPayment: (sessionId: string) => Promise<ContractResult>;
-  
-  // Query functions
+
   getSession: (sessionId: string) => Promise<SessionInfo | null>;
   getPaymentStatus: (sessionId: string) => Promise<PaymentStatus>;
   getSessionParticipants: (sessionId: string) => Promise<ParticipantPayment[]>;
   hasParticipantPaid: (sessionId: string, participantAddress?: string) => Promise<boolean>;
-  
-  // Utilities
+
   clearError: () => void;
   clearAllData: () => void;
 }
@@ -44,7 +44,6 @@ export const useContract = (): UseContractReturn => {
 
   const { address: walletAddress, isConnected: walletConnected } = useWallet();
 
-  // Helper para manejar operaciones del contrato - MODIFICADO
   const executeContractOperation = useCallback(async (
     operation: () => Promise<{ success: boolean; txHash?: string; error?: string }>,
     successMessage?: string
@@ -58,47 +57,35 @@ export const useContract = (): UseContractReturn => {
     setContractState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      // Simular delay de transacción
-      await simulateTransactionDelay(1500);
-      
+      await simulateTransactionDelay(500);
       const result = await operation();
-      
+
       if (result.success) {
         setContractState({
           isLoading: false,
           error: null,
           lastTxHash: result.txHash || null,
         });
-        
         if (successMessage) {
-          console.log(`✅ [CONTRACT] ${successMessage}`, { txHash: result.txHash });
+          console.log(`✅ ${successMessage}`, { txHash: result.txHash });
         }
-        
         return { success: true, txHash: result.txHash };
       } else {
-        setContractState(prev => ({
-          ...prev,
-          isLoading: false,
-          error: result.error || 'Transaction failed',
-        }));
-        return { success: false, error: result.error || 'Transaction failed' };
+        const err = result.error || 'Transaction failed';
+        setContractState(prev => ({ ...prev, isLoading: false, error: err }));
+        return { success: false, error: err };
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      setContractState(prev => ({
-        ...prev,
-        isLoading: false,
-        error: errorMessage,
-      }));
-      return { success: false, error: errorMessage };
+      const err = error instanceof Error ? error.message : 'Unknown error';
+      setContractState(prev => ({ ...prev, isLoading: false, error: err }));
+      return { success: false, error: err };
     }
   }, [walletConnected, walletAddress]);
 
-  // Crear sesión en el contrato - MODIFICADO: agregado merchantAddress
   const createSession = useCallback(async (
-    sessionId: string, 
+    sessionId: string,
     merchantId: string,
-    merchantAddress: string, 
+    merchantAddress: string,
     totalAmount: number
   ): Promise<ContractResult> => {
     return executeContractOperation(
@@ -107,10 +94,9 @@ export const useContract = (): UseContractReturn => {
     );
   }, [executeContractOperation]);
 
-  // Unirse a sesión - MODIFICADO: agregado participantAddress
   const joinSession = useCallback(async (
     sessionId: string,
-    participantAddress: string, 
+    participantAddress: string,
     amountOwed: number
   ): Promise<ContractResult> => {
     return executeContractOperation(
@@ -119,7 +105,6 @@ export const useContract = (): UseContractReturn => {
     );
   }, [executeContractOperation]);
 
-  // Realizar pago individual - MODIFICADO: agregado participantAddress
   const makePayment = useCallback(async (
     sessionId: string,
     participantAddress: string
@@ -130,7 +115,6 @@ export const useContract = (): UseContractReturn => {
     );
   }, [executeContractOperation]);
 
-  // Ejecutar pago grupal - MODIFICADO: retorna ContractResult
   const executeGroupPayment = useCallback(async (sessionId: string): Promise<ContractResult> => {
     return executeContractOperation(
       () => contractService.executeGroupPayment(sessionId),
@@ -138,7 +122,7 @@ export const useContract = (): UseContractReturn => {
     );
   }, [executeContractOperation]);
 
-  // Obtener información de sesión
+  // Reads
   const getSession = useCallback(async (sessionId: string): Promise<SessionInfo | null> => {
     try {
       return await contractService.getSession(sessionId);
@@ -148,7 +132,6 @@ export const useContract = (): UseContractReturn => {
     }
   }, []);
 
-  // Obtener estado de pagos
   const getPaymentStatus = useCallback(async (sessionId: string): Promise<PaymentStatus> => {
     try {
       return await contractService.getPaymentStatus(sessionId);
@@ -163,7 +146,6 @@ export const useContract = (): UseContractReturn => {
     }
   }, []);
 
-  // Obtener participantes de sesión
   const getSessionParticipants = useCallback(async (sessionId: string): Promise<ParticipantPayment[]> => {
     try {
       return await contractService.getSessionParticipants(sessionId);
@@ -173,35 +155,27 @@ export const useContract = (): UseContractReturn => {
     }
   }, []);
 
-  // Verificar si participante pagó
   const hasParticipantPaid = useCallback(async (
-    sessionId: string, 
+    sessionId: string,
     participantAddress?: string
   ): Promise<boolean> => {
     try {
-      const address = participantAddress || walletAddress;
-      if (!address) return false;
-      
-      return await contractService.hasParticipantPaid(sessionId, address);
+      const addr = participantAddress || walletAddress;
+      if (!addr) return false;
+      return await contractService.hasParticipantPaid(sessionId, addr);
     } catch (error) {
       console.error('Error checking payment status:', error);
       return false;
     }
   }, [walletAddress]);
 
-  // Limpiar error
   const clearError = useCallback(() => {
     setContractState(prev => ({ ...prev, error: null }));
   }, []);
 
-  // Limpiar todos los datos (para testing)
   const clearAllData = useCallback(() => {
     contractService.clearAllData();
-    setContractState({
-      isLoading: false,
-      error: null,
-      lastTxHash: null,
-    });
+    setContractState({ isLoading: false, error: null, lastTxHash: null });
   }, []);
 
   return {
