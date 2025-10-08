@@ -8,19 +8,20 @@ datasource db {
 }
 
 model Session {
-  id                String    @id @default(cuid())
-  sessionId         String    @unique @map("session_id")
-  merchantId        String    @map("merchant_id")
-  status            String    @default("active")
-  totalAmount       Float     @default(0) @map("total_amount")
-  participantsCount Int       @default(0) @map("participants_count")
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
-  timeoutAt         DateTime? @map("timeout_at")
+  id                   String    @id @default(cuid())
+  sessionId            String    @unique @map("session_id")
+  merchantId           String    @map("merchant_id")
+  status               String    @default("active")
+  totalAmount          Float     @default(0) @map("total_amount")
+  participantsCount    Int       @default(0) @map("participants_count")
+  blockchainSessionId  String?   @map("blockchain_session_id")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  timeoutAt            DateTime? @map("timeout_at")
 
   participants Participant[]
   items        Item[]
-  payments     Payment[]     @relation("SessionPayments") // 👈 nombre explícito
+  payments     Payment[]     @relation("SessionPayments")
 
   @@map("sessions")
 }
@@ -36,8 +37,6 @@ model Participant {
   isOperator    Boolean  @default(false) @map("is_operator")
 
   session Session @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
-
-  // 👇 lado opuesto de Payment.participant (era lo que faltaba)
   payments Payment[] @relation("ParticipantPayments")
 
   @@unique([sessionId, userId])
@@ -74,10 +73,7 @@ model Payment {
   createdAt     DateTime  @default(now()) @map("created_at")
   confirmedAt   DateTime? @map("confirmed_at")
 
-  // 👇 relación con Session (le ponemos nombre explícito también)
   session Session @relation("SessionPayments", fields: [sessionId], references: [sessionId], onDelete: Cascade)
-
-  // 👇 relación con Participant (con nombre y lado opuesto en Participant)
   participant Participant? @relation("ParticipantPayments", fields: [participantId], references: [id], onDelete: SetNull)
 
   @@index([sessionId])

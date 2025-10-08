@@ -32,8 +32,8 @@ const io = new Server(server, {
 });
 
 // 🔄 REAL-TIME: Store para sesiones activas y usuarios conectados
-const activeSessions = new Map(); // sessionId -> { users: Set, lastActivity: Date }
-const userSessions = new Map();   // socketId  -> { sessionId, userId, userName }
+const activeSessions = new Map();
+const userSessions = new Map();
 
 // Security middleware
 app.use(helmet());
@@ -103,7 +103,6 @@ class SplitEngine {
     }));
   }
 
-  // ✅ NORMALIZA siempre items (amount/tax/tip numéricos y assignees como array)
   static calculateProportionalSplit(items, participants) {
     const participantTotals = new Map();
     let grandTotal = 0;
@@ -174,7 +173,6 @@ class SplitEngine {
     });
   }
 
-  // ✅ Normalizamos acá también para blindar todos los endpoints
   static calculateSplits(sessionData, method = SplitMethods.PROPORTIONAL, options = {}) {
     const participants = sessionData.participants || [];
     const rawItems = sessionData.items || [];
@@ -300,12 +298,14 @@ app.get('/', (req, res) => {
       'Split Engine',
       'Live Session Updates',
       'Real-time Participant Tracking',
-      'Auto-calculated Splits'
+      'Auto-calculated Splits',
+      'Blockchain Integration'
     ],
     endpoints: {
       health: '/health',
       sessions: '/api/sessions',
-      payments: '/api/sessions/:id/pay',   // ← actualizado
+      blockchain: '/api/sessions/:id/blockchain',
+      payments: '/api/sessions/:id/pay',
       splits: '/api/sessions/:id/splits',
       realtime: 'Socket.io events available'
     },
@@ -359,7 +359,6 @@ app.post('/api/sessions', async (req, res) => {
       include: { participants: true, items: true, payments: true }
     });
 
-    // 🔄 REAL-TIME: Inicializar tracking de sesión
     activeSessions.set(sessionId, {
       users: new Set(),
       lastActivity: new Date(),
@@ -422,7 +421,6 @@ app.get('/api/sessions/:sessionId', async (req, res) => {
   }
 });
 
-// 🔄 MEJORADO: Join con real-time broadcast (wallet normalizada)
 app.post('/api/sessions/:sessionId/join', async (req, res) => {
   try {
     console.log(`👤 [JOIN SESSION] Usuario intentando unirse a: ${req.params.sessionId}`);
@@ -465,7 +463,6 @@ app.post('/api/sessions/:sessionId/join', async (req, res) => {
   }
 });
 
-// 🔄 TOLERANTE: crear/actualizar participante al sincronizar wallet
 app.put('/api/sessions/:sessionId/participants/:userId/wallet', async (req, res) => {
   try {
     const { sessionId, userId } = req.params;
@@ -477,7 +474,6 @@ app.put('/api/sessions/:sessionId/participants/:userId/wallet', async (req, res)
 
     let participant = await prisma.participant.findFirst({ where: { sessionId, userId } });
 
-    // Si no existe, crear
     if (!participant) {
       participant = await prisma.participant.create({
         data: {
@@ -501,7 +497,6 @@ app.put('/api/sessions/:sessionId/participants/:userId/wallet', async (req, res)
       });
     }
 
-    // Actualizar wallet
     const updated = await prisma.participant.update({
       where: { id: participant.id },
       data: { walletAddress: String(walletAddress).toLowerCase().trim() }
@@ -521,8 +516,31 @@ app.put('/api/sessions/:sessionId/participants/:userId/wallet', async (req, res)
   }
 });
 
+// 🔗 NUEVO: Endpoint para guardar blockchainSessionId
+app.put('/api/sessions/:sessionId/blockchain', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { blockchainSessionId } = req.body;
 
-// 🔄 MEJORADO: Agregar items con real-time broadcast
+    console.log(`🔗 [BLOCKCHAIN] Guardando blockchainSessionId para sesión ${sessionId}`);
+
+    const updatedSession = await prisma.session.update({
+      where: { sessionId },
+      data: { blockchainSessionId }
+    });
+
+    await broadcastSessionUpdate(sessionId, 'blockchain-session-created', {
+      blockchainSessionId,
+      message: 'Sesión blockchain creada'
+    });
+
+    res.json({ success: true, session: updatedSession });
+  } catch (error) {
+    console.error('🔥 [ERROR /blockchain]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/sessions/:sessionId/items', async (req, res) => {
   try {
     console.log(`🧾 [ADD ITEM] ${req.body.name} → Sesión ${req.params.sessionId}`);
@@ -607,7 +625,6 @@ app.post('/api/sessions/:sessionId/items', async (req, res) => {
   }
 });
 
-// PUT assignees (update)
 app.put('/api/sessions/:sessionId/items/:itemId/assignees', async (req, res) => {
   try {
     const { sessionId, itemId } = req.params;
@@ -664,7 +681,6 @@ app.put('/api/sessions/:sessionId/items/:itemId/assignees', async (req, res) => 
   }
 });
 
-// 🔄 Calcular splits con real-time
 app.post('/api/sessions/:sessionId/calculate-splits', async (req, res) => {
   try {
     const { sessionId } = req.params;
@@ -695,7 +711,6 @@ app.post('/api/sessions/:sessionId/calculate-splits', async (req, res) => {
   }
 });
 
-// Obtener splits existentes
 app.get('/api/sessions/:sessionId/splits', async (req, res) => {
   try {
     const session = await prisma.session.findUnique({
@@ -713,7 +728,6 @@ app.get('/api/sessions/:sessionId/splits', async (req, res) => {
   }
 });
 
-// 🔄 NUEVO: Endpoint para usuarios conectados
 app.get('/api/sessions/:sessionId/connected-users', (req, res) => {
   const sessionData = activeSessions.get(req.params.sessionId);
 
@@ -738,11 +752,9 @@ app.get('/api/sessions/:sessionId/connected-users', (req, res) => {
   });
 });
 
-// Utility: moneda
 const formatCurrency = (amount) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(amount);
 
-// 🔐 NUEVO: Make payment (busca por wallet O userId y guarda participantId)
 app.post('/api/sessions/:sessionId/pay', async (req, res) => {
   try {
     const { sessionId } = req.params;
@@ -775,8 +787,7 @@ app.post('/api/sessions/:sessionId/pay', async (req, res) => {
       });
     }
 
-    // TODO: Invocar blockchain y obtener txHash real
-    const txHash = '0x' + Math.random().toString(16).slice(2); // mock
+    const txHash = '0x' + Math.random().toString(16).slice(2);
 
     const payment = await prisma.payment.create({
       data: {
@@ -802,8 +813,7 @@ app.post('/api/sessions/:sessionId/pay', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
-// 🔄 SOCKET.IO REAL-TIME MEJORADO
+// SOCKET.IO REAL-TIME MEJORADO
 io.on('connection', (socket) => {
   console.log(`🔌 Usuario conectado: ${socket.id}`);
 
@@ -943,13 +953,13 @@ app.use((req, res) => {
       'GET /api/sessions/:id',
       'GET /api/sessions/:id/connected-users',
       'POST /api/sessions/:id/join',
+      'PUT /api/sessions/:id/participants/:userId/wallet',
+      'PUT /api/sessions/:id/blockchain',
       'POST /api/sessions/:id/items',
       'PUT /api/sessions/:id/items/:itemId/assignees',
       'GET /api/sessions/:id/splits',
       'POST /api/sessions/:id/calculate-splits',
-      'POST /api/sessions/:id/pay',
-      'POST /api/test/numbers',
-      'POST /api/test/splits'
+      'POST /api/sessions/:id/pay'
     ]
   });
 });
@@ -970,7 +980,7 @@ process.on('SIGTERM', async () => {
 // Limpiar sesiones inactivas cada 5 minutos
 setInterval(() => {
   const now = new Date();
-  const inactiveThreshold = 30 * 60 * 1000; // 30 minutos
+  const inactiveThreshold = 30 * 60 * 1000;
   for (const [sessionId, sessionData] of activeSessions.entries()) {
     if (sessionData.users.size === 0 && (now - sessionData.lastActivity) > inactiveThreshold) {
       activeSessions.delete(sessionId);
@@ -987,6 +997,7 @@ server.listen(PORT, () => {
   console.log(`🔄 Socket.io habilitado para real-time sync`);
   console.log(`🐘 PostgreSQL conectado via Prisma ORM`);
   console.log(`🧮 Split Engine activado`);
+  console.log(`🔗 Blockchain integration ready`);
   console.log(`🌍 Modo: ${process.env.NODE_ENV || 'development'}`);
   console.log('');
   console.log('📋 Endpoints disponibles:');
@@ -996,12 +1007,13 @@ server.listen(PORT, () => {
   console.log('   GET  /api/sessions/:id        - Obtener sesión');
   console.log('   GET  /api/sessions/:id/connected-users - Usuarios conectados');
   console.log('   POST /api/sessions/:id/join   - Unirse a sesión');
+  console.log('   PUT  /api/sessions/:id/participants/:userId/wallet - Actualizar wallet');
+  console.log('   PUT  /api/sessions/:id/blockchain - Guardar blockchain session ID');
   console.log('   POST /api/sessions/:id/items  - Agregar item');
+  console.log('   PUT  /api/sessions/:id/items/:itemId/assignees - Actualizar asignaciones');
   console.log('   GET  /api/sessions/:id/splits - Obtener splits');
   console.log('   POST /api/sessions/:id/calculate-splits - Calcular splits');
   console.log('   POST /api/sessions/:id/pay    - Pagar (userId o wallet)');
-  console.log('   POST /api/test/numbers        - Test números');
-  console.log('   POST /api/test/splits         - Test splits');
   console.log('');
   console.log('🔄 Socket.io Events disponibles:');
   console.log('   join-session     → Unirse a sesión en tiempo real');
@@ -1019,6 +1031,7 @@ server.listen(PORT, () => {
   console.log('   user-connected       → Usuario se conectó');
   console.log('   user-disconnected    → Usuario se desconectó');
   console.log('   user-typing          → Usuario escribiendo');
+  console.log('   blockchain-session-created → Sesión blockchain creada');
   console.log('');
   console.log('🧮 Métodos de división soportados: equal | proportional | weighted | custom');
   console.log('');

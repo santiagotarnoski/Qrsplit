@@ -63,6 +63,7 @@ interface Session {
   participants: Participant[];
   items: Item[];
   payments: any[];
+  blockchainSessionId?: string; // ← AGREGAR
 }
 interface Split {
   participantId: number | string;
@@ -281,32 +282,45 @@ export default function QRSplitApp() {
   const searchParams = useSearchParams();
 
   // -------- Carga por URL --------
-  useEffect(() => {
-    const sessionIdFromUrl = searchParams.get('sessionId');
-    const userNameFromUrl = searchParams.get('userName');
-    if (sessionIdFromUrl && !currentSession) {
-      loadSessionFromUrl(sessionIdFromUrl);
-      if (userNameFromUrl) setCurrentUserName(userNameFromUrl);
+useEffect(() => {
+  const sessionIdFromUrl = searchParams.get('sessionId');
+  const userNameFromUrl = searchParams.get('userName');
+  const walletAddressFromUrl = searchParams.get('walletAddress');
+  
+  if (sessionIdFromUrl && !currentSession) {
+    loadSessionFromUrl(sessionIdFromUrl);
+    if (userNameFromUrl) setCurrentUserName(userNameFromUrl);
+    
+    if (walletAddressFromUrl && !walletConnected) {
+      const shortAddress = `${walletAddressFromUrl.slice(0, 6)}...${walletAddressFromUrl.slice(-4)}`;
+      setError(`Conecta tu wallet (${shortAddress}) para poder realizar pagos blockchain`);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, currentSession]);
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [searchParams, currentSession, walletConnected]);
 
   const loadSessionFromUrl = async (sessionId: string) => {
-    setLoading(true);
-    try {
-      const resp = await fetch(`http://localhost:3000/api/sessions/${sessionId}`);
-      if (!resp.ok) throw new Error(`HTTP error! status: ${resp.status}`);
-      const data = await resp.json();
-      const session = (data.session || data) as Session;
-      session.items = (session.items || []).map((it) => ({ ...it, assignees: parseAssigneesSafe(it.assignees) }));
-      setCurrentSession(session);
-      if (session.participants?.length > 0) await fetchSplitsForSession(sessionId);
-    } catch (e) {
-      setError('Error cargando sesión desde el enlace');
-    } finally {
-      setLoading(false);
+  setLoading(true);
+  try {
+    const resp = await fetch(`http://localhost:3000/api/sessions/${sessionId}`);
+    if (!resp.ok) throw new Error(`HTTP error! status: ${resp.status}`);
+    const data = await resp.json();
+    const session = (data.session || data) as Session;
+    session.items = (session.items || []).map((it) => ({ ...it, assignees: parseAssigneesSafe(it.assignees) }));
+    setCurrentSession(session);
+    
+    // ← NUEVO: Cargar blockchainSessionId si existe
+    if (session.blockchainSessionId) {
+      setBlockchainSessionId(session.blockchainSessionId);
     }
-  };
+    
+    if (session.participants?.length > 0) await fetchSplitsForSession(sessionId);
+  } catch (e) {
+    setError('Error cargando sesión desde el enlace');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const fetchSplitsForSession = async (sessionId: string) => {
     try {
@@ -415,36 +429,50 @@ export default function QRSplitApp() {
 
   // -------- Acciones --------
   const createSession = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch('http://localhost:3000/api/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ merchant_id: merchantId }),
-      });
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const data = await response.json();
-      setCurrentSession(data.session);
-      const userName = prompt('Ingresa tu nombre para la sesión:') || `Usuario ${currentUserId.slice(-5)}`;
-      setCurrentUserName(userName);
+  setLoading(true);
+  setError(null);
+  try {
+    const response = await fetch('http://localhost:3000/api/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ merchant_id: merchantId }),
+    });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const data = await response.json();
+    setCurrentSession(data.session);
+    const userName = prompt('Ingresa tu nombre para la sesión:') || `Usuario ${currentUserId.slice(-5)}`;
+    setCurrentUserName(userName);
 
-      if (walletConnected && walletAddress) {
-        const r = await createBlockchainSession(
-          data.session.sessionId,
-          merchantId,
-          walletAddress,
-          parseFloat(data.session.totalAmount) || 0
-        );
-        if (r.success) setBlockchainSessionId(data.session.sessionId);
+    if (walletConnected && walletAddress) {
+      const r = await createBlockchainSession(
+        data.session.sessionId,
+        merchantId,
+        walletAddress,
+        parseFloat(data.session.totalAmount) || 0
+      );
+      if (r.success) {
+        setBlockchainSessionId(data.session.sessionId);
+        
+        // Guardar blockchainSessionId en backend
+        try {
+          await fetch(`http://localhost:3000/api/sessions/${data.session.sessionId}/blockchain`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ blockchainSessionId: data.session.sessionId }),
+          });
+          console.log('✅ BlockchainSessionId guardado en backend');
+        } catch (err) {
+          console.error('❌ Error guardando blockchainSessionId:', err);
+          // No bloqueamos la ejecución si falla esto
+        }
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error creando sesión');
-    } finally {
-      setLoading(false);
     }
-  };
-
+  } catch (err) {
+    setError(err instanceof Error ? err.message : 'Error creando sesión');
+  } finally {
+    setLoading(false);
+  }
+};
   const joinSession = async () => {
     if (!currentSession) return;
     try {
