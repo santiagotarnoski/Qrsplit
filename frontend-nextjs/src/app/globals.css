@@ -250,3 +250,177 @@ body {
     font-size: 18px;
   }
 }
+
+/* ============================================
+   ESTILOS PARA MODAL DE WALLET MUY OSCURO
+   Modal de get-starknet personalizado
+   ============================================ */
+
+/* FORZAR MODO OSCURO EN TODO EL MODAL */
+[role="dialog"],
+[role="dialog"] *,
+[role="dialog"] main,
+[role="dialog"] div,
+[role="dialog"] header {
+  background-color: rgb(15 23 42) !important; /* slate-900 */
+  color: white !important;
+}
+
+/* Modal principal container */
+[role="dialog"][class*="bg-"],
+[role="dialog"][class*="slate"],
+div[class*="bg-slate"] {
+  background-color: rgb(15 23 42) !important;
+  border: 1px solid rgb(147 51 234 / 0.4) !important; /* purple-600/40 */
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.5) !important;
+}
+
+/* Main del modal */
+[role="dialog"] main {
+  background-color: rgb(15 23 42) !important;
+}
+
+/* Header del modal */
+[role="dialog"] header {
+  background-color: rgb(15 23 42) !important;
+  border-bottom: 1px solid rgb(51 65 85) !important; /* slate-700 */
+  padding-bottom: 1rem !important;
+}
+
+/* Título "Connect a wallet" */
+[role="dialog"] h1,
+[role="dialog"] h2,
+[role="dialog"] h3 {
+  color: white !important;
+  font-weight: 600 !important;
+  background: transparent !important;
+}
+
+/* Botón de cerrar (X) */
+[role="dialog"] [alt="Close"],
+[role="dialog"] span[role="button"] {
+  color: rgb(148 163 184) !important; /* slate-400 */
+  background-color: transparent !important;
+  cursor: pointer !important;
+}
+
+[role="dialog"] [alt="Close"]:hover,
+[role="dialog"] span[role="button"]:hover {
+  color: white !important;
+  background-color: rgb(51 65 85) !important; /* slate-700 */
+  border-radius: 0.375rem !important;
+}
+
+/* SVG del botón cerrar */
+[role="dialog"] svg {
+  color: rgb(148 163 184) !important;
+}
+
+[role="dialog"] [alt="Close"]:hover svg,
+[role="dialog"] span[role="button"]:hover svg {
+  color: white !important;
+}
+
+/* Lista de wallets */
+[role="dialog"] ul {
+  background-color: rgb(15 23 42) !important;
+  gap: 0.75rem !important;
+}
+
+/* BOTONES DE WALLET - MUY OSCUROS */
+[role="dialog"] button,
+[role="dialog"] li button,
+[role="dialog"] ul button {
+  background-color: rgb(30 41 59) !important; /* slate-800 */
+  border: 1px solid rgb(71 85 105) !important; /* slate-600 */
+  color: white !important;
+  padding: 1rem !important;
+  border-radius: 0.75rem !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.3) !important;
+}
+
+[role="dialog"] button:hover,
+[role="dialog"] li button:hover {
+  background-color: rgb(51 65 85) !important; /* slate-700 */
+  border-color: rgb(147 51 234 / 0.6) !important; /* purple-600/60 */
+  transform: translateY(-2px) !important;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.3) !important;
+}
+
+[role="dialog"] button:active {
+  transform: translateY(0) !important;
+}
+
+/* Texto dentro de los botones */
+[role="dialog"] button span,
+[role="dialog"] li span {
+  color: white !important;
+  background: transparent !important;
+}
+
+/* ÍCONOS DE WALLET - FONDO BLANCO PARA MÁXIMO CONTRASTE */
+[role="dialog"] button img,
+[role="dialog"] li img {
+  filter: brightness(1.1) contrast(1.1) !important;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important;
+  padding: 10px !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Links de descarga */
+[role="dialog"] a {
+  color: rgb(168 85 247) !important; /* purple-400 */
+  text-decoration: underline !important;
+  background: transparent !important;
+}
+
+[role="dialog"] a:hover {
+  color: rgb(192 132 252) !important; /* purple-300 */
+}
+
+/* Backdrop del modal - MUY OSCURO */
+div[class*="backdrop"],
+div[class*="fixed"][class*="inset-0"]:has([role="dialog"]) {
+  background-color: rgba(0, 0, 0, 0.75) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+/* Separadores */
+[role="dialog"] hr {
+  border-color: rgb(51 65 85) !important; /* slate-700 */
+  background-color: rgb(51 65 85) !important;
+}
+
+/* Texto secundario */
+[role="dialog"] [class*="text-sm"],
+[role="dialog"] p {
+  color: rgb(203 213 225) !important; /* slate-300 */
+  background: transparent !important;
+}
+
+/* Estado de loading */
+[role="dialog"] [class*="animate-spin"] {
+  color: rgb(168 85 247) !important; /* purple-400 */
+}
+
+/* Items de lista */
+[role="dialog"] li {
+  background-color: transparent !important;
+}
+
+/* Forzar divs anidados oscuros */
+[role="dialog"] > div,
+[role="dialog"] main > div {
+  background-color: rgb(15 23 42) !important;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  [role="dialog"][class*="bg-slate"] {
+    max-width: calc(100vw - 2rem) !important;
+    margin: 1rem !important;
+  }
+}

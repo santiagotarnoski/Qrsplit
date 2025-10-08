@@ -26,7 +26,7 @@ import {
   ArrowLeft,
   Shield,
   Zap,
-  Copy as CopyIcon, // ← alias para evitar ReferenceError
+  Copy as CopyIcon,
 } from 'lucide-react';
 import { useSocket } from '../../hooks/useSocket';
 import { WalletButton } from '../../components/WalletButton';
@@ -154,7 +154,7 @@ const RealtimeNotifications = ({
         </Badge>
 
         {isConnected && connectedUsers.length > 0 && (
-          <Badge className="bg-cyan-500/10 text-cyan-400 border-cyan-500/20">
+          <Badge className="bg-purple-500/10 text-purple-400 border-purple-500/20">
             <Users className="w-3 h-3 mr-2" />
             {connectedUsers.length} online
           </Badge>
@@ -163,7 +163,7 @@ const RealtimeNotifications = ({
         {notifications.length > 0 && (
           <button
             onClick={() => setShowNotifications(!showNotifications)}
-            className="relative p-2 bg-gradient-to-r from-purple-500 to-cyan-500 text-white rounded-full hover:from-purple-600 hover:to-cyan-600 transition-all shadow-lg"
+            className="relative p-2 bg-purple-600 hover:bg-purple-700 text-white rounded-full transition-all shadow-lg"
           >
             <Bell className="w-4 h-4" />
             <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
@@ -223,7 +223,7 @@ const CustomQRCode: React.FC<{ value: string; size?: number }> = ({ value, size 
         await QRCode.toCanvas(canvasRef.current, value, {
           width: size,
           margin: 1,
-          color: { dark: '#00D9A0', light: '#ffffff' },
+          color: { dark: '#9333ea', light: '#ffffff' },
           errorCorrectionLevel: 'M',
         });
       } catch (err) {
@@ -377,7 +377,6 @@ useEffect(() => {
   const syncWalletToBackend = async () => {
     if (!currentSession || !walletConnected || !walletAddress) return;
     try {
-      // 1) Intento directo: PUT
       let res = await fetch(
         `http://localhost:3000/api/sessions/${currentSession.sessionId}/participants/${currentUserId}/wallet`,
         {
@@ -387,7 +386,6 @@ useEffect(() => {
         }
       );
 
-      // 2) Si no existe el participante, me uno y reintento
       if (res.status === 404) {
         await fetch(`http://localhost:3000/api/sessions/${currentSession.sessionId}/join`, {
           method: 'POST',
@@ -419,7 +417,6 @@ useEffect(() => {
     }
   };
 
-  // Auto-sync cuando haya wallet + sesión
   useEffect(() => {
     if (currentSession && walletConnected && walletAddress) {
       syncWalletToBackend();
@@ -539,7 +536,6 @@ useEffect(() => {
       return;
     }
     try {
-      // 🔒 Asegura existencia del participante y wallet en backend
       await syncWalletToBackend();
 
       setPaymentStates((prev) => ({ ...prev, [participant.userId]: 'paying' }));
@@ -594,28 +590,27 @@ useEffect(() => {
   // ========= Render =========
   return (
     <div className="relative min-h-screen">
-      {/* Fondo tipo landing */}
       <Plasma color="#6366f1" speed={0.6} direction="forward" scale={1.1} opacity={0.6} mouseInteractive />
       <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-purple-900/20 to-black/40 pointer-events-none z-0" />
 
       <div className="relative z-10">
         {/* Banner */}
-        <div className="bg-gradient-to-r from-slate-900/80 via-blue-900/60 to-slate-900/80 border-b border-emerald-500/20 text-white py-3 px-4">
+        <div className="bg-gradient-to-r from-slate-900/80 via-purple-900/60 to-slate-900/80 border-b border-purple-500/20 text-white py-3 px-4">
           <div className="max-w-7xl mx-auto">
             <div className="flex items-center justify-center gap-3">
-              <Shield className="w-4 h-4 text-emerald-400" />
-              <span className="font-semibold text-emerald-400">QRSplit MVP</span>
+              <Shield className="w-4 h-4 text-purple-400" />
+              <span className="font-semibold text-purple-400">QRSplit MVP</span>
               <span className="text-slate-400">•</span>
               <span className="text-sm text-slate-300">Smart Contract</span>
             </div>
             <div className="flex items-center justify-center gap-4 mt-2 text-xs text-slate-300">
               <div className="flex items-center gap-1">
-                <Wifi className="w-3 h-3 text-cyan-400" />
+                <Wifi className="w-3 h-3 text-purple-400" />
                 <span>Real-time splits</span>
               </div>
               <span>•</span>
               <div className="flex items-center gap-1">
-                <Zap className="w-3 h-3 text-emerald-400" />
+                <Zap className="w-3 h-3 text-purple-400" />
                 <span>Blockchain ready</span>
               </div>
               <span>•</span>
@@ -646,11 +641,11 @@ useEffect(() => {
           <div className="text-center mb-12">
             <div className="flex items-center justify-center mb-4">
               <div className="relative">
-                <QrCode className="w-16 h-16 text-emerald-400" strokeWidth={1.5} />
-                <div className="absolute inset-0 bg-emerald-400/20 blur-xl" />
+                <QrCode className="w-16 h-16 text-purple-400" strokeWidth={1.5} />
+                <div className="absolute inset-0 bg-purple-400/20 blur-xl" />
               </div>
             </div>
-            <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-white via-emerald-200 to-emerald-400 bg-clip-text text-transparent">
+            <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-white via-purple-200 to-purple-400 bg-clip-text text-transparent">
               QRSplit App
             </h1>
             <p className="text-xl text-slate-200 mb-6">Divide cuentas en tiempo real con garantía blockchain</p>
@@ -667,7 +662,7 @@ useEffect(() => {
               </Badge>
               <Badge
                 className={`${
-                  isConnected ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' : 'bg-slate-500/10 text-slate-400 border-slate-500/20'
+                  isConnected ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' : 'bg-slate-500/10 text-slate-400 border-slate-500/20'
                 }`}
               >
                 Real-time: {isConnected ? '✅' : '🔄'}
@@ -681,7 +676,7 @@ useEffect(() => {
                 Wallet: {walletConnected ? '✅' : '❌'}
               </Badge>
               {blockchainSessionId && (
-                <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                <Badge className="bg-purple-500/10 text-purple-400 border-purple-500/20">
                   <LinkIcon className="w-3 h-3 mr-1" />
                   Blockchain: ✅
                 </Badge>
@@ -699,7 +694,7 @@ useEffect(() => {
               <Button
                 variant="outline"
                 size="sm"
-                className="mt-2"
+                className="mt-2 border-slate-600 text-slate-200 hover:bg-slate-700"
                 onClick={() => {
                   setError(null);
                   clearContractError();
@@ -739,7 +734,7 @@ useEffect(() => {
                 <Button
                   onClick={createSession}
                   disabled={loading || !merchantId}
-                  className="w-full bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white font-semibold shadow-lg shadow-emerald-500/50"
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold shadow-lg shadow-purple-500/50"
                 >
                   {loading ? 'Creando...' : '🚀 Crear & Generar QR'}
                 </Button>
@@ -752,10 +747,10 @@ useEffect(() => {
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between text-white">
                     <div className="flex items-center gap-2">
-                      <QrCode className="w-5 h-5 text-emerald-400" />
+                      <QrCode className="w-5 h-5 text-purple-400" />
                       Comparte tu sesión
                       {connectedUsers.length > 0 && (
-                        <Badge className="bg-cyan-500/10 text-cyan-400 border-cyan-500/20">{connectedUsers.length} online</Badge>
+                        <Badge className="bg-purple-500/10 text-purple-400 border-purple-500/20">{connectedUsers.length} online</Badge>
                       )}
                     </div>
                     <div className="flex gap-2">
@@ -780,12 +775,12 @@ useEffect(() => {
                       <h3 className="font-semibold text-lg text-white mb-2">¡Escanea para unirte!</h3>
                       <p className="text-slate-400 mb-4">Sesión: {currentSession.sessionId.slice(-8)}...</p>
                       <div className="space-y-2">
-                        <div className="flex items-center text-sm text-emerald-400">
+                        <div className="flex items-center text-sm text-purple-400">
                           <Check className="w-4 h-4 mr-2" />
                           {currentSession.participantsCount} participantes
                         </div>
                         {isConnected && (
-                          <div className="flex items-center text-sm text-cyan-400">
+                          <div className="flex items-center text-sm text-purple-400">
                             <Wifi className="w-4 h-4 mr-2" />
                             Sincronización activa
                           </div>
@@ -800,7 +795,7 @@ useEffect(() => {
               <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
                 <CardHeader>
                   <CardTitle className="flex items-center text-white">
-                    <Users className="w-5 h-5 mr-2 text-emerald-400" />
+                    <Users className="w-5 h-5 mr-2 text-purple-400" />
                     Información de Sesión
                   </CardTitle>
                 </CardHeader>
@@ -812,7 +807,7 @@ useEffect(() => {
                     </div>
                     <div>
                       <span className="text-slate-400">Estado:</span>
-                      <Badge className="ml-2 bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                      <Badge className="ml-2 bg-purple-500/10 text-purple-400 border-purple-500/20">
                         {currentSession.status}
                       </Badge>
                     </div>
@@ -822,7 +817,7 @@ useEffect(() => {
                     </div>
                     <div>
                       <span className="text-slate-400">Total:</span>
-                      <p className="font-medium text-emerald-400">
+                      <p className="font-medium text-purple-400">
                         {formatCurrency(parseFloat(currentSession.totalAmount))}
                       </p>
                     </div>
@@ -844,7 +839,7 @@ useEffect(() => {
                                 <User className="w-4 h-4 text-slate-400" />
                                 <span className="text-white">{participant.name || participant.userId}</span>
                                 {participant.userId === currentUserId && (
-                                  <Badge variant="outline" className="ml-2 text-xs border-emerald-500/20 text-emerald-400">
+                                  <Badge variant="outline" className="ml-2 text-xs border-purple-500/20 text-purple-400">
                                     Tú
                                   </Badge>
                                 )}
@@ -865,7 +860,7 @@ useEffect(() => {
                   <div className="pt-4 border-t border-slate-700">
                     <Button
                       onClick={joinSession}
-                      className="w-full bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-600 hover:to-cyan-600"
+                      className="w-full bg-purple-600 hover:bg-purple-700 text-white"
                     >
                       <Users className="w-4 h-4 mr-2" />
                       Unirse a Sesión
@@ -878,7 +873,7 @@ useEffect(() => {
               <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
                 <CardHeader>
                   <CardTitle className="flex items-center text-white">
-                    <Plus className="w-5 h-5 mr-2 text-emerald-400" />
+                    <Plus className="w-5 h-5 mr-2 text-purple-400" />
                     Agregar Item
                   </CardTitle>
                 </CardHeader>
@@ -915,7 +910,7 @@ useEffect(() => {
                             onClick={() => toggleParticipantSelection(participant.id)}
                             className={`w-full justify-start ${
                               selectedParticipants.includes(participant.id)
-                                ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 hover:bg-emerald-500/30'
+                                ? 'bg-purple-500/20 border-purple-500/50 text-purple-300 hover:bg-purple-500/30'
                                 : 'border-slate-600 text-slate-300 hover:bg-slate-700'
                             }`}
                           >
@@ -939,7 +934,7 @@ useEffect(() => {
                   <Button
                     onClick={addItem}
                     disabled={loading || !itemName || !itemAmount}
-                    className="w-full bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 shadow-lg shadow-emerald-500/50"
+                    className="w-full bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-500/50"
                   >
                     <Plus className="w-4 h-4 mr-2" />
                     {loading ? 'Agregando...' : 'Agregar Item'}
@@ -952,7 +947,7 @@ useEffect(() => {
                 <Card className="lg:col-span-2 bg-slate-800/50 border-slate-700 backdrop-blur-sm">
                   <CardHeader>
                     <CardTitle className="flex items-center text-white">
-                      <DollarSign className="w-5 h-5 mr-2 text-emerald-400" />
+                      <DollarSign className="w-5 h-5 mr-2 text-purple-400" />
                       Items en la Cuenta ({currentSession.items.length})
                     </CardTitle>
                   </CardHeader>
@@ -965,15 +960,15 @@ useEffect(() => {
                               <h4 className="font-medium text-white">{item.name}</h4>
                               <p className="text-sm text-slate-400">Asignado a: {getParticipantNames(item.assignees || [])}</p>
                             </div>
-                            <span className="font-mono text-emerald-400 text-lg">{formatCurrency(Number(item.amount))}</span>
+                            <span className="font-mono text-purple-400 text-lg">{formatCurrency(Number(item.amount))}</span>
                           </div>
                         </div>
                       ))}
 
-                      <div className="bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20 p-4 rounded-lg">
+                      <div className="bg-gradient-to-r from-purple-500/10 to-purple-600/10 border border-purple-500/20 p-4 rounded-lg">
                         <div className="flex justify-between items-center">
                           <span className="font-semibold text-white">Total:</span>
-                          <span className="text-2xl font-bold text-emerald-400">
+                          <span className="text-2xl font-bold text-purple-400">
                             {formatCurrency(parseFloat(currentSession.totalAmount))}
                           </span>
                         </div>
@@ -989,10 +984,10 @@ useEffect(() => {
                   <CardHeader>
                     <CardTitle className="flex items-center justify-between text-white">
                       <div className="flex items-center gap-2">
-                        <Calculator className="w-5 h-5 text-emerald-400" />
+                        <Calculator className="w-5 h-5 text-purple-400" />
                         División de Pagos
                         {isConnected && (
-                          <Badge className="bg-cyan-500/10 text-cyan-400 border-cyan-500/20">
+                          <Badge className="bg-purple-500/10 text-purple-400 border-purple-500/20">
                             <Wifi className="w-3 h-3 mr-1" />
                             Sincronizado
                           </Badge>
@@ -1029,7 +1024,7 @@ useEffect(() => {
                                 </div>
                               </div>
                               <div className="text-right">
-                                <p className={`text-lg font-bold ${isCurrentUser ? 'text-purple-400' : 'text-emerald-400'}`}>
+                                <p className={`text-lg font-bold ${isCurrentUser ? 'text-purple-400' : 'text-purple-400'}`}>
                                   {formatCurrency(participant.amount)}
                                 </p>
                                 <p className="text-sm text-slate-500">{participant.percentage.toFixed(1)}% del total</p>
@@ -1046,7 +1041,7 @@ useEffect(() => {
                                         Pagado
                                       </Badge>
                                     ) : paymentState === 'paying' ? (
-                                      <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30">
+                                      <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30">
                                         <Clock className="w-3 h-3 mr-1 animate-spin" />
                                         Procesando...
                                       </Badge>
@@ -1068,7 +1063,7 @@ useEffect(() => {
                                       onClick={() => handleIndividualPayment(participant)}
                                       disabled={contractLoading}
                                       size="sm"
-                                      className="bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-600 hover:to-cyan-600 shadow-lg shadow-purple-500/50"
+                                      className="bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-500/50"
                                     >
                                       <Wallet className="w-4 h-4 mr-1" />
                                       {paymentState === 'failed' ? 'Reintentar' : 'Pagar con Blockchain'}
@@ -1104,11 +1099,11 @@ useEffect(() => {
               <p className="text-slate-400 text-sm mb-4">QRSplit v3.0 - Blockchain MVP para Starknet Hackathon</p>
               <div className="flex items-center justify-center flex-wrap gap-4 text-xs text-slate-400">
                 <div className="flex items-center gap-1">
-                  <CheckCircle className="w-3 h-3 text-emerald-400" />
+                  <CheckCircle className="w-3 h-3 text-purple-400" />
                   QR Sharing
                 </div>
                 <div className="flex items-center gap-1">
-                  <CheckCircle className="w-3 h-3 text-cyan-400" />
+                  <CheckCircle className="w-3 h-3 text-purple-400" />
                   Real-time Splits
                 </div>
                 <div className="flex items-center gap-1">
@@ -1116,7 +1111,7 @@ useEffect(() => {
                   Smart Contracts
                 </div>
                 <div className="flex items-center gap-1">
-                  <CheckCircle className="w-3 h-3 text-emerald-400" />
+                  <CheckCircle className="w-3 h-3 text-purple-400" />
                   Mobile Ready
                 </div>
               </div>

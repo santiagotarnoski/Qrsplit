@@ -88,13 +88,13 @@ export default function LandingPage() {
                     transition: 'all 1s ease-out 0.4s'
                   }}
                 >
-                  <QrCode className="w-20 h-20 text-emerald-400" strokeWidth={1.5} />
-                  <div className="absolute inset-0 bg-emerald-400/20 blur-xl" />
+                  <QrCode className="w-20 h-20 text-purple-400" strokeWidth={1.5} />
+                  <div className="absolute inset-0 bg-purple-400/20 blur-xl" />
                 </div>
               </div>
               
               <h1 
-                className="text-6xl md:text-7xl font-bold mb-6 bg-gradient-to-r from-white via-emerald-200 to-emerald-400 bg-clip-text text-transparent"
+                className="text-6xl md:text-7xl font-bold mb-6 bg-gradient-to-r from-white via-purple-200 to-purple-400 bg-clip-text text-transparent"
                 style={{
                   opacity: isVisible ? 1 : 0,
                   transform: isVisible ? 'translateY(0)' : 'translateY(30px)',
@@ -131,7 +131,7 @@ export default function LandingPage() {
               <Link href="/app">
                 <Button 
                   size="lg"
-                  className="group relative bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white font-semibold px-12 py-6 text-lg shadow-2xl shadow-emerald-500/50 transition-all hover:shadow-emerald-500/70 hover:scale-105"
+                  className="group relative bg-purple-600 hover:bg-purple-700 text-white font-semibold px-12 py-6 text-lg shadow-2xl shadow-purple-500/50 transition-all hover:shadow-purple-500/70 hover:scale-105"
                   style={{
                     opacity: isVisible ? 1 : 0,
                     transform: isVisible ? 'scale(1)' : 'scale(0.8)',
@@ -142,14 +142,14 @@ export default function LandingPage() {
                     Abrir QRSplit App
                     <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                   </span>
-                  <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-cyan-500/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity -z-10" />
+                  <div className="absolute inset-0 bg-purple-500/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity -z-10" />
                 </Button>
               </Link>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
               <div 
-                className="bg-slate-800/30 backdrop-blur-sm border border-emerald-500/20 rounded-lg p-6"
+                className="bg-slate-800/30 backdrop-blur-sm border border-purple-500/20 rounded-lg p-6"
                 style={{
                   opacity: isVisible ? 1 : 0,
                   transform: isVisible ? 'translateY(0)' : 'translateY(40px)',
@@ -157,7 +157,7 @@ export default function LandingPage() {
                 }}
               >
                 <div className="flex items-center gap-3 mb-3">
-                  <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                  <CheckCircle className="w-5 h-5 text-purple-400 flex-shrink-0" />
                   <h3 className="font-semibold text-white">Sin registro requerido</h3>
                 </div>
                 <p className="text-sm text-slate-400">Escanea el QR y listo. No necesitas crear cuenta ni compartir datos personales.</p>
@@ -179,7 +179,7 @@ export default function LandingPage() {
               </div>
               
               <div 
-                className="bg-slate-800/30 backdrop-blur-sm border border-cyan-500/20 rounded-lg p-6"
+                className="bg-slate-800/30 backdrop-blur-sm border border-purple-500/20 rounded-lg p-6"
                 style={{
                   opacity: isVisible ? 1 : 0,
                   transform: isVisible ? 'translateY(0)' : 'translateY(40px)',
@@ -187,7 +187,7 @@ export default function LandingPage() {
                 }}
               >
                 <div className="flex items-center gap-3 mb-3">
-                  <Zap className="w-5 h-5 text-cyan-400 flex-shrink-0" />
+                  <Zap className="w-5 h-5 text-purple-400 flex-shrink-0" />
                   <h3 className="font-semibold text-white">Splits automáticos</h3>
                 </div>
                 <p className="text-sm text-slate-400">El cálculo se hace en tiempo real. Todos ven los cambios instantáneamente.</p>
@@ -213,12 +213,12 @@ export default function LandingPage() {
                 }}
               >
                 <CardContent className="p-8">
-                  <div className="w-14 h-14 bg-gradient-to-br from-emerald-500 to-cyan-500 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                  <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                     <QrCode className="w-8 h-8 text-white" />
                   </div>
                   <h3 className="text-2xl font-semibold text-white mb-3">QR Sharing</h3>
                   <p className="text-slate-400 mb-4">Únete a sesiones escaneando un código QR. Sin registros, sin fricciones.</p>
-                  <div className="flex items-center text-emerald-400 text-sm font-medium">
+                  <div className="flex items-center text-purple-400 text-sm font-medium">
                     <CheckCircle className="w-4 h-4 mr-2" />
                     Instantáneo
                   </div>
@@ -234,7 +234,7 @@ export default function LandingPage() {
                 }}
               >
                 <CardContent className="p-8">
-                  <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                  <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                     <Zap className="w-8 h-8 text-white" />
                   </div>
                   <h3 className="text-2xl font-semibold text-white mb-3">Real-time Splits</h3>
@@ -255,12 +255,12 @@ export default function LandingPage() {
                 }}
               >
                 <CardContent className="p-8">
-                  <div className="w-14 h-14 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                  <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                     <Lock className="w-8 h-8 text-white" />
                   </div>
                   <h3 className="text-2xl font-semibold text-white mb-3">Pagos Atómicos</h3>
                   <p className="text-slate-400 mb-4">Todos pagan simultáneamente o la transacción falla. Sin deudas pendientes.</p>
-                  <div className="flex items-center text-cyan-400 text-sm font-medium">
+                  <div className="flex items-center text-purple-400 text-sm font-medium">
                     <CheckCircle className="w-4 h-4 mr-2" />
                     Smart Contracts
                   </div>
@@ -288,7 +288,7 @@ export default function LandingPage() {
                   }}
                 >
                   <div className="flex items-center justify-center mb-6">
-                    <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-cyan-500 rounded-full flex items-center justify-center text-2xl font-bold text-white shadow-2xl shadow-emerald-500/50">
+                    <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-600 rounded-full flex items-center justify-center text-2xl font-bold text-white shadow-2xl shadow-purple-500/50">
                       1
                     </div>
                   </div>
@@ -297,7 +297,7 @@ export default function LandingPage() {
                 </div>
 
                 <div className="hidden md:block">
-                  <ArrowRight className="w-8 h-8 text-emerald-500" />
+                  <ArrowRight className="w-8 h-8 text-purple-500" />
                 </div>
 
                 <div 
@@ -309,7 +309,7 @@ export default function LandingPage() {
                   }}
                 >
                   <div className="flex items-center justify-center mb-6">
-                    <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-2xl font-bold text-white shadow-2xl shadow-purple-500/50">
+                    <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-600 rounded-full flex items-center justify-center text-2xl font-bold text-white shadow-2xl shadow-purple-500/50">
                       2
                     </div>
                   </div>
@@ -330,7 +330,7 @@ export default function LandingPage() {
                   }}
                 >
                   <div className="flex items-center justify-center mb-6">
-                    <div className="w-16 h-16 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-full flex items-center justify-center text-2xl font-bold text-white shadow-2xl shadow-cyan-500/50">
+                    <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-600 rounded-full flex items-center justify-center text-2xl font-bold text-white shadow-2xl shadow-purple-500/50">
                       3
                     </div>
                   </div>
@@ -354,13 +354,13 @@ export default function LandingPage() {
             >
               <CardContent className="p-12">
                 <div className="flex items-start gap-6">
-                  <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-cyan-500 rounded-2xl flex items-center justify-center flex-shrink-0">
+                  <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center flex-shrink-0">
                     <TrendingUp className="w-8 h-8 text-white" />
                   </div>
                   <div>
                     <h3 className="text-3xl font-bold text-white mb-4">El Diferenciador Clave</h3>
                     <p className="text-xl text-slate-300 mb-6">
-                      A diferencia de <span className="text-purple-400 font-semibold">Splitwise</span> y otras apps tradicionales que solo <span className="italic">calculan</span> quién debe qué, <span className="text-emerald-400 font-semibold">QRSplit ejecuta pagos atómicos on-chain</span> que garantizan que todos paguen simultáneamente.
+                      A diferencia de <span className="text-purple-400 font-semibold">Splitwise</span> y otras apps tradicionales que solo <span className="italic">calculan</span> quién debe qué, <span className="text-purple-400 font-semibold">QRSplit ejecuta pagos atómicos on-chain</span> que garantizan que todos paguen simultáneamente.
                     </p>
                     <div className="grid md:grid-cols-2 gap-6">
                       <div className="flex items-start gap-3">
@@ -371,7 +371,7 @@ export default function LandingPage() {
                         </div>
                       </div>
                       <div className="flex items-start gap-3">
-                        <div className="w-2 h-2 bg-emerald-500 rounded-full mt-2" />
+                        <div className="w-2 h-2 bg-purple-500 rounded-full mt-2" />
                         <div>
                           <div className="font-semibold text-white mb-1">QRSplit</div>
                           <div className="text-sm text-slate-400">Smart contracts atómicos. Pagos garantizados.</div>
@@ -410,7 +410,7 @@ export default function LandingPage() {
             <Link href="/app">
               <Button 
                 size="lg"
-                className="group relative bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white font-semibold px-12 py-6 text-lg shadow-2xl shadow-emerald-500/50 transition-all hover:shadow-emerald-500/70 hover:scale-105"
+                className="group relative bg-purple-600 hover:bg-purple-700 text-white font-semibold px-12 py-6 text-lg shadow-2xl shadow-purple-500/50 transition-all hover:shadow-purple-500/70 hover:scale-105"
                 style={{
                   opacity: visibleSections.has('cta') ? 1 : 0,
                   transform: visibleSections.has('cta') ? 'scale(1)' : 'scale(0.9)',
@@ -421,7 +421,7 @@ export default function LandingPage() {
                   Abrir QRSplit App
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </span>
-                <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-cyan-500/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity -z-10" />
+                <div className="absolute inset-0 bg-purple-500/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity -z-10" />
               </Button>
             </Link>
           </div>
@@ -433,7 +433,7 @@ export default function LandingPage() {
               <div className="text-slate-400 text-sm">QRSplit v3.0 - Blockchain MVP para Starknet Hackathon</div>
               <div className="flex gap-6 text-sm text-slate-400">
                 <div className="flex items-center gap-2">
-                  <CheckCircle className="w-4 h-4 text-emerald-400" />
+                  <CheckCircle className="w-4 h-4 text-purple-400" />
                   QR Sharing
                 </div>
                 <div className="flex items-center gap-2">
@@ -441,7 +441,7 @@ export default function LandingPage() {
                   Real-time Splits
                 </div>
                 <div className="flex items-center gap-2">
-                  <CheckCircle className="w-4 h-4 text-cyan-400" />
+                  <CheckCircle className="w-4 h-4 text-purple-400" />
                   Smart Contracts
                 </div>
               </div>

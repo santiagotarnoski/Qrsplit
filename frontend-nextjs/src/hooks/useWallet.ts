@@ -55,11 +55,18 @@ export const useWallet = (): UseWalletReturn => {
       // Intentar conectar con la wallet
       const starknet = await connect({
         modalMode: 'canAsk',
-        modalTheme: 'light',
+        modalTheme: 'dark',
       });
 
+      // ✅ ARREGLO: Si el usuario cancela, starknet será null - NO lanzar error
       if (!starknet) {
-        throw new Error('No se encontró ninguna wallet de Starknet. Instala Argent X o Braavos.');
+        console.log('👤 [WALLET] Usuario canceló la conexión');
+        setWalletState(prev => ({
+          ...prev,
+          isConnecting: false,
+          error: null, // NO mostrar error si el usuario cancela
+        }));
+        return; // Salir silenciosamente
       }
 
       console.log('🔍 [WALLET] Wallet detectada:', (starknet as any).name || 'Unknown');
@@ -71,7 +78,14 @@ export const useWallet = (): UseWalletReturn => {
           accounts = await (starknet as any).enable();
         }
       } catch (enableError) {
-        console.log('Error con enable, intentando métodos alternativos');
+        console.log('⚠️ [WALLET] Error con enable, probablemente el usuario canceló');
+        // Si enable falla, probablemente el usuario canceló
+        setWalletState(prev => ({
+          ...prev,
+          isConnecting: false,
+          error: null,
+        }));
+        return;
       }
 
       // Obtener dirección de múltiples formas posibles
@@ -120,10 +134,24 @@ export const useWallet = (): UseWalletReturn => {
         errorMessage = error.message;
       }
       
-      // Mensajes de error más amigables
-      if (errorMessage.includes('User rejected') || errorMessage.includes('User denied')) {
-        errorMessage = 'Conexión cancelada por el usuario';
-      } else if (errorMessage.includes('No wallet') || errorMessage.includes('No se encontró')) {
+      // ✅ ARREGLO: Detectar cancelación del usuario y NO mostrar error
+      if (errorMessage.includes('User rejected') || 
+          errorMessage.includes('User denied') ||
+          errorMessage.includes('User cancelled') ||
+          errorMessage.includes('cancelled') ||
+          errorMessage.includes('rejected by user') ||
+          errorMessage.includes('user rejected')) {
+        console.log('👤 [WALLET] Usuario canceló la conexión');
+        setWalletState(prev => ({
+          ...prev,
+          isConnecting: false,
+          error: null, // NO mostrar error
+        }));
+        return; // Salir silenciosamente
+      }
+      
+      // Solo mostrar error si NO es una cancelación del usuario
+      if (errorMessage.includes('No wallet') || errorMessage.includes('No se encontró')) {
         errorMessage = 'No se encontró wallet. Instala Argent X o Braavos.';
       } else if (errorMessage.includes('not available') || errorMessage.includes('no disponibles')) {
         errorMessage = 'Librerías de Starknet no disponibles. Verifica la instalación.';
@@ -216,7 +244,7 @@ export const useWallet = (): UseWalletReturn => {
             }
           }
         } catch (error) {
-          console.log('⚠️ [WALLET] Reconexión automática falló');
+          console.log('⚠️ [WALLET] Reconexión automática falló (normal si no hay wallet)');
           localStorage.removeItem('qrsplit_wallet_connected');
           localStorage.removeItem('qrsplit_wallet_address');
           localStorage.removeItem('qrsplit_wallet_name');
