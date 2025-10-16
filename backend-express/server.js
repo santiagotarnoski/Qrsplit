@@ -25,11 +25,16 @@ const parseAssignees = (assigneesString) => {
 
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:3001", "http://localhost:3000"],
+    origin: [
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "https://qrsplit.vercel.app"
+    ],
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
   }
 });
+
 
 // 🔄 REAL-TIME: Store para sesiones activas y usuarios conectados
 const activeSessions = new Map();
@@ -42,9 +47,16 @@ app.use(morgan('combined'));
 
 // CORS configuration
 app.use(cors({
-  origin: ["http://localhost:3001", "http://localhost:3000"],
-  credentials: true
+  origin: [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "https://qrsplit.vercel.app"
+  ],
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
 }));
+
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
