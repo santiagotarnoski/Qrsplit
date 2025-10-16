@@ -1,84 +1,84 @@
-generator client {
-  provider = "prisma-client-js"
-}
+  generator client {
+    provider = "prisma-client-js"
+  }
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
+  datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+  }
 
-model Session {
-  id                String    @id @default(cuid())
-  sessionId         String    @unique @map("session_id")
-  merchantId        String    @map("merchant_id")
-  merchantWallet    String?   @map("merchant_wallet") // 👈 NUEVO: Wallet que recibe pagos
-  createdBy         String?   @map("created_by")      // 👈 NUEVO: userId del creador
-  status            String    @default("active")
-  totalAmount       Float     @default(0) @map("total_amount")
-  participantsCount Int       @default(0) @map("participants_count")
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
-  timeoutAt         DateTime? @map("timeout_at")
+  model Session {
+    id                String    @id @default(cuid())
+    sessionId         String    @unique @map("session_id")
+    merchantId        String    @map("merchant_id")
+    merchantWallet    String?   @map("merchant_wallet") // 👈 NUEVO: Wallet que recibe pagos
+    createdBy         String?   @map("created_by")      // 👈 NUEVO: userId del creador
+    status            String    @default("active")
+    totalAmount       Float     @default(0) @map("total_amount")
+    participantsCount Int       @default(0) @map("participants_count")
+    createdAt         DateTime  @default(now()) @map("created_at")
+    updatedAt         DateTime  @updatedAt @map("updated_at")
+    timeoutAt         DateTime? @map("timeout_at")
 
-  participants Participant[]
-  items        Item[]
-  payments     Payment[]     @relation("SessionPayments")
+    participants Participant[]
+    items        Item[]
+    payments     Payment[]     @relation("SessionPayments")
 
-  @@index([merchantWallet]) // 👈 NUEVO: Índice para búsquedas rápidas
-  @@map("sessions")
-}
+    @@index([merchantWallet]) // 👈 NUEVO: Índice para búsquedas rápidas
+    @@map("sessions")
+  }
 
-model Participant {
-  id            String   @id @default(cuid())
-  sessionId     String   @map("session_id")
-  userId        String   @map("user_id")
-  name          String?  @map("name")
-  walletAddress String?  @map("wallet_address")
-  joinedAt      DateTime @default(now()) @map("joined_at")
-  addedBy       String?  @map("added_by")
-  isOperator    Boolean  @default(false) @map("is_operator")
+  model Participant {
+    id            String   @id @default(cuid())
+    sessionId     String   @map("session_id")
+    userId        String   @map("user_id")
+    name          String?  @map("name")
+    walletAddress String?  @map("wallet_address")
+    joinedAt      DateTime @default(now()) @map("joined_at")
+    addedBy       String?  @map("added_by")
+    isOperator    Boolean  @default(false) @map("is_operator")
 
-  session Session @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
-  payments Payment[] @relation("ParticipantPayments")
+    session Session @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+    payments Payment[] @relation("ParticipantPayments")
 
-  @@unique([sessionId, userId])
-  @@unique([sessionId, walletAddress])
-  @@index([sessionId])
-  @@map("participants")
-}
+    @@unique([sessionId, userId])
+    @@unique([sessionId, walletAddress])
+    @@index([sessionId])
+    @@map("participants")
+  }
 
-model Item {
-  id        String   @id @default(cuid())
-  sessionId String   @map("session_id")
-  name      String
-  amount    Float
-  tax       Float    @default(0)
-  tip       Float    @default(0)
-  assignees String   @default("[]")
-  addedAt   DateTime @default(now()) @map("added_at")
+  model Item {
+    id        String   @id @default(cuid())
+    sessionId String   @map("session_id")
+    name      String
+    amount    Float
+    tax       Float    @default(0)
+    tip       Float    @default(0)
+    assignees String   @default("[]")
+    addedAt   DateTime @default(now()) @map("added_at")
 
-  session Session @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+    session Session @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
 
-  @@map("items")
-}
+    @@map("items")
+  }
 
-model Payment {
-  id            String    @id @default(cuid())
-  sessionId     String    @map("session_id")
-  participantId String?   @map("participant_id")
-  fromAddress   String    @map("from_address")
-  toAddress     String    @map("to_address")
-  amount        Float
-  tokenAddress  String    @map("token_address")
-  txHash        String?   @map("tx_hash")
-  status        String    @default("pending")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  confirmedAt   DateTime? @map("confirmed_at")
+  model Payment {
+    id            String    @id @default(cuid())
+    sessionId     String    @map("session_id")
+    participantId String?   @map("participant_id")
+    fromAddress   String    @map("from_address")
+    toAddress     String    @map("to_address")
+    amount        Float
+    tokenAddress  String    @map("token_address")
+    txHash        String?   @map("tx_hash")
+    status        String    @default("pending")
+    createdAt     DateTime  @default(now()) @map("created_at")
+    confirmedAt   DateTime? @map("confirmed_at")
 
-  session Session @relation("SessionPayments", fields: [sessionId], references: [sessionId], onDelete: Cascade)
-  participant Participant? @relation("ParticipantPayments", fields: [participantId], references: [id], onDelete: SetNull)
+    session Session @relation("SessionPayments", fields: [sessionId], references: [sessionId], onDelete: Cascade)
+    participant Participant? @relation("ParticipantPayments", fields: [participantId], references: [id], onDelete: SetNull)
 
-  @@index([sessionId])
-  @@index([participantId])
-  @@map("payments")
-}
+    @@index([sessionId])
+    @@index([participantId])
+    @@map("payments")
+  }
