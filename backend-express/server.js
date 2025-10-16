@@ -395,9 +395,7 @@ app.post('/api/sessions', async (req, res) => {
 
     const webLink = `${FRONTEND_URL}/session/${sessionId}`;
 
-    // Usar FRONTEND_URL desde las variables de entorno (Render)
-    const FRONTEND_URL = process.env.FRONTEND_URL || "https://qrsplit.vercel.app";
-
+    
     res.json({
       success: true,
       session_id: sessionId,
