@@ -395,16 +395,16 @@ app.post('/api/sessions', async (req, res) => {
 
     const webLink = `${FRONTEND_URL}/session/${sessionId}`;
 
-    // Detectar entorno (local o producción)
-const FRONTEND_URL = process.env.FRONTEND_URL || "https://qrsplit.vercel.app";
+    // Usar FRONTEND_URL desde las variables de entorno (Render)
+    const FRONTEND_URL = process.env.FRONTEND_URL || "https://qrsplit.vercel.app";
 
-res.json({
-  success: true,
-  session_id: sessionId,
-  session,
-  qr_code: `qrsplit://session/${sessionId}`,
-  web_link: `${FRONTEND_URL}/session/${sessionId}`
-});
+    res.json({
+      success: true,
+      session_id: sessionId,
+      session,
+      qr_code: `qrsplit://session/${sessionId}`,
+      web_link: `${FRONTEND_URL}/session/${sessionId}`
+    });
 
 
   } catch (error) {
