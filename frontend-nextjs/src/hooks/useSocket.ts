@@ -2,14 +2,13 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 
-// Declaración de tipos global para socket.io-client
+// Tipos globales
 declare global {
   interface Window {
     io: any;
   }
 }
 
-// Importación que funciona en Next.js
 let io: any;
 if (typeof window !== 'undefined') {
   io = require('socket.io-client').io;
@@ -21,14 +20,28 @@ interface SocketUser {
   connectedAt?: string;
 }
 
-export const useSocket = () => {
+interface UseSocketReturn {
+  socket: any;
+  isConnected: boolean;
+  connectedUsers: SocketUser[];
+  lastUpdate: any;
+  notifications: string[];
+  joinSession: (sessionId: string, userId: string, userName: string) => void;
+  leaveSession: () => void;
+  sendTyping: (action?: string) => void;
+  stopTyping: () => void;
+  clearNotifications: () => void;
+  removeNotification: (index: number) => void;
+  emit: (event: string, data?: any) => void;
+}
+
+export const useSocket = (): UseSocketReturn => {
   const socketRef = useRef<any>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [connectedUsers, setConnectedUsers] = useState<SocketUser[]>([]);
   const [lastUpdate, setLastUpdate] = useState<any>(null);
   const [notifications, setNotifications] = useState<string[]>([]);
 
-  // Función para agregar notificaciones
   const addNotification = useCallback((message: string) => {
     setNotifications(prev => [...prev, message]);
     setTimeout(() => {
@@ -36,22 +49,22 @@ export const useSocket = () => {
     }, 5000);
   }, []);
 
-  // Inicializar socket
   useEffect(() => {
     if (typeof window === 'undefined' || !io) return;
 
-    const socket = io('http://localhost:3000', {
+    // 🔥 BACKEND DEPLOY DE RENDER:
+    const socket = io('https://qrsplit-backend.onrender.com', {
       autoConnect: true,
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       timeout: 20000,
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
+      withCredentials: true,
     });
 
     socketRef.current = socket;
 
-    // Event listeners básicos
     socket.on('connect', () => {
       console.log('Socket conectado:', socket.id);
       setIsConnected(true);
@@ -79,27 +92,28 @@ export const useSocket = () => {
     });
 
     socket.on('session-updated', (data: any) => {
-        console.log('Session updated:', data);
-        setLastUpdate(data);
-  
-        switch (data.type) {
-            case 'participant-joined':
-                addNotification(`${data.data.participant.name || data.data.participant.userId} se unió`);
-                break;
-            case 'item-added':
-                addNotification(`${data.data.item.name} agregado`);
-                break;
-            case 'item-assignees-updated':
-                addNotification(`Asignaciones actualizadas para ${data.data.item.name}`);
-                break;
-            case 'splits-calculated':
-                addNotification('División de pagos actualizada');
-                break;
-            default:
-                addNotification('Sesión actualizada');
-            break;
-        }
+      console.log('Session updated:', data);
+      setLastUpdate(data);
+
+      switch (data.type) {
+        case 'participant-joined':
+          addNotification(`${data.data.participant.name || data.data.participant.userId} se unió`);
+          break;
+        case 'item-added':
+          addNotification(`${data.data.item.name} agregado`);
+          break;
+        case 'item-assignees-updated':
+          addNotification(`Asignaciones actualizadas para ${data.data.item.name}`);
+          break;
+        case 'splits-calculated':
+          addNotification('División de pagos actualizada');
+          break;
+        default:
+          addNotification('Sesión actualizada');
+          break;
+      }
     });
+
     socket.on('user-connected', (data: any) => {
       console.log('Usuario conectado:', data);
       setConnectedUsers(prev => [
@@ -107,8 +121,8 @@ export const useSocket = () => {
         {
           userId: data.userId,
           userName: data.userName,
-          connectedAt: data.timestamp
-        }
+          connectedAt: data.timestamp,
+        },
       ]);
       addNotification(`${data.userName} se conectó`);
     });
@@ -124,7 +138,7 @@ export const useSocket = () => {
     });
 
     socket.on('user-stopped-typing', (data: any) => {
-      console.log('Usuario paró de escribir:', data);
+      console.log('Usuario dejó de escribir:', data);
     });
 
     socket.on('session-sync', (data: any) => {
@@ -133,7 +147,7 @@ export const useSocket = () => {
         type: 'session-sync',
         session: data.session,
         splits: data.splits,
-        connectedUsers: data.connectedUsers
+        connectedUsers: data.connectedUsers,
       });
     });
 
@@ -146,14 +160,12 @@ export const useSocket = () => {
       console.log('Pong recibido:', data);
     });
 
-    // Cleanup
     return () => {
       socket.disconnect();
       socketRef.current = null;
     };
   }, [addNotification]);
 
-  // Funciones principales
   const joinSession = useCallback((sessionId: string, userId: string, userName: string) => {
     const socket = socketRef.current;
     if (!socket) {
@@ -162,11 +174,7 @@ export const useSocket = () => {
     }
 
     console.log(`Uniéndose a sesión: ${sessionId} como ${userName}`);
-    socket.emit('join-session', {
-      sessionId,
-      userId,
-      userName
-    });
+    socket.emit('join-session', { sessionId, userId, userName });
   }, []);
 
   const leaveSession = useCallback(() => {
@@ -181,14 +189,12 @@ export const useSocket = () => {
   const sendTyping = useCallback((action = 'typing') => {
     const socket = socketRef.current;
     if (!socket) return;
-
     socket.emit('typing-start', { action });
   }, []);
 
   const stopTyping = useCallback(() => {
     const socket = socketRef.current;
     if (!socket) return;
-
     socket.emit('typing-stop');
   }, []);
 
@@ -203,18 +209,15 @@ export const useSocket = () => {
   const emit = useCallback((event: string, data?: any) => {
     const socket = socketRef.current;
     if (!socket) return;
-
     socket.emit(event, data);
   }, []);
 
-  // Heartbeat cada 30 segundos
+  // Heartbeat
   useEffect(() => {
     if (!isConnected) return;
-
     const interval = setInterval(() => {
       emit('ping');
     }, 30000);
-
     return () => clearInterval(interval);
   }, [isConnected, emit]);
 
@@ -230,6 +233,6 @@ export const useSocket = () => {
     stopTyping,
     clearNotifications,
     removeNotification,
-    emit
+    emit,
   };
 };
