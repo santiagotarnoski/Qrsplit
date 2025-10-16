@@ -19,16 +19,13 @@ interface Session {
   items: any[];
 }
 
-// Helper para construir URLs del backend sin dobles barras
-const apiUrl = (path: string) => {
-  const base = (process.env.NEXT_PUBLIC_BACKEND_URL || '').replace(/\/$/, '');
-  return `${base}${path}`;
-};
-
 export default function SessionPage() {
   const params = useParams();
   const router = useRouter();
   const sessionId = params.sessionId as string;
+
+  // 🔹 Base URL dinámica
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,18 +34,17 @@ export default function SessionPage() {
   const [joining, setJoining] = useState(false);
 
   useEffect(() => {
-    if (sessionId) fetchSession();
+    if (sessionId) {
+      fetchSession();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   const fetchSession = async () => {
     try {
-      const res = await fetch(apiUrl(`/api/sessions/${sessionId}`), { cache: 'no-store' });
-      if (!res.ok) {
-        const msg = await safeMessage(res);
-        throw new Error(msg || 'Sesión no encontrada');
-      }
-      const data = await res.json();
+      const response = await fetch(`${API_BASE}/api/sessions/${sessionId}`);
+      if (!response.ok) throw new Error('Sesión no encontrada');
+      const data = await response.json();
       setSession(data.session || data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error cargando sesión');
@@ -64,7 +60,7 @@ export default function SessionPage() {
     try {
       const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
 
-      const res = await fetch(apiUrl(`/api/sessions/${sessionId}/join`), {
+      const response = await fetch(`${API_BASE}/api/sessions/${sessionId}/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -73,10 +69,7 @@ export default function SessionPage() {
         }),
       });
 
-      if (!res.ok) {
-        const msg = await safeMessage(res);
-        throw new Error(msg || 'Error uniéndose a la sesión');
-      }
+      if (!response.ok) throw new Error('Error uniéndose a la sesión');
 
       const qs = new URLSearchParams({
         sessionId,
@@ -91,16 +84,6 @@ export default function SessionPage() {
       setError(err instanceof Error ? err.message : 'Error uniéndose a sesión');
     } finally {
       setJoining(false);
-    }
-  };
-
-  // Intenta leer mensaje de error del backend si lo hubiera
-  const safeMessage = async (res: Response) => {
-    try {
-      const data = await res.json();
-      return (data && (data.message || data.error)) as string | undefined;
-    } catch {
-      return undefined;
     }
   };
 
@@ -160,13 +143,11 @@ export default function SessionPage() {
 
       <div className="relative p-4" style={{ zIndex: 2 }}>
         <div className="max-w-2xl mx-auto py-8">
-          {/* Header */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-white mb-2">QRSplit</h1>
             <p className="text-slate-300">Únete a la sesión de pago grupal</p>
           </div>
 
-          {/* Información de la Sesión */}
           <Card className="mb-6 bg-slate-800/30 backdrop-blur-sm border-purple-500/20">
             <CardHeader>
               <CardTitle className="flex items-center text-white">
@@ -194,13 +175,13 @@ export default function SessionPage() {
                 <div className="mb-4">
                   <h4 className="font-medium mb-2 text-white">Participantes actuales:</h4>
                   <div className="space-y-1">
-                    {session.participants.map((p: any, i: number) => (
+                    {session.participants.map((participant: any, index: number) => (
                       <div
-                        key={i}
+                        key={index}
                         className="flex items-center text-sm bg-purple-500/10 border border-purple-500/20 p-2 rounded"
                       >
                         <Users className="w-4 h-4 mr-2 text-purple-400" />
-                        <span className="text-slate-200">{p.name || p.userId}</span>
+                        <span className="text-slate-200">{participant.name || participant.userId}</span>
                       </div>
                     ))}
                   </div>
@@ -214,8 +195,8 @@ export default function SessionPage() {
                     Items en la cuenta:
                   </h4>
                   <div className="space-y-1">
-                    {session.items.map((item: any, i: number) => (
-                      <div key={i} className="flex justify-between text-sm bg-slate-700/30 p-2 rounded">
+                    {session.items.map((item: any, index: number) => (
+                      <div key={index} className="flex justify-between text-sm bg-slate-700/30 p-2 rounded">
                         <span className="text-slate-200">{item.name}</span>
                         <span className="font-mono text-slate-300">${parseFloat(item.amount).toFixed(2)}</span>
                       </div>
@@ -226,7 +207,6 @@ export default function SessionPage() {
             </CardContent>
           </Card>
 
-          {/* Formulario de Unirse */}
           <Card className="bg-slate-800/30 backdrop-blur-sm border-purple-500/20">
             <CardHeader>
               <CardTitle className="text-white">Unirse a la Sesión</CardTitle>
