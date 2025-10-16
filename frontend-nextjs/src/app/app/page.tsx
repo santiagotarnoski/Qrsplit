@@ -677,7 +677,7 @@ function QRSplitApp() {
 
     setLoading(true);
     try {
-      const resp = await fetch(`http://localhost:3000/api/sessions/${currentSession.sessionId}/finalize`, {
+      const resp = await fetch(`https://qrsplit-backend.onrender.com/api/sessions/${currentSession.sessionId}/finalize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
