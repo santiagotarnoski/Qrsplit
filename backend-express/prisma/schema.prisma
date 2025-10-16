@@ -8,21 +8,23 @@ datasource db {
 }
 
 model Session {
-  id                   String    @id @default(cuid())
-  sessionId            String    @unique @map("session_id")
-  merchantId           String    @map("merchant_id")
-  status               String    @default("active")
-  totalAmount          Float     @default(0) @map("total_amount")
-  participantsCount    Int       @default(0) @map("participants_count")
-  blockchainSessionId  String?   @map("blockchain_session_id")
-  createdAt            DateTime  @default(now()) @map("created_at")
-  updatedAt            DateTime  @updatedAt @map("updated_at")
-  timeoutAt            DateTime? @map("timeout_at")
+  id                String    @id @default(cuid())
+  sessionId         String    @unique @map("session_id")
+  merchantId        String    @map("merchant_id")
+  merchantWallet    String?   @map("merchant_wallet") // 👈 NUEVO: Wallet que recibe pagos
+  createdBy         String?   @map("created_by")      // 👈 NUEVO: userId del creador
+  status            String    @default("active")
+  totalAmount       Float     @default(0) @map("total_amount")
+  participantsCount Int       @default(0) @map("participants_count")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  timeoutAt         DateTime? @map("timeout_at")
 
   participants Participant[]
   items        Item[]
   payments     Payment[]     @relation("SessionPayments")
 
+  @@index([merchantWallet]) // 👈 NUEVO: Índice para búsquedas rápidas
   @@map("sessions")
 }
 

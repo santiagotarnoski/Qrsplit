@@ -56,6 +56,8 @@ interface Session {
   id: string;
   sessionId: string;
   merchantId: string;
+  merchantWallet?: string;   // NUEVO
+  createdBy?: string;        // NUEVO
   status: string;
   totalAmount: string;
   participantsCount: number;
@@ -63,7 +65,7 @@ interface Session {
   participants: Participant[];
   items: Item[];
   payments: any[];
-  blockchainSessionId?: string; // ← AGREGAR
+  blockchainSessionId?: string; // NUEVO
 }
 interface Split {
   participantId: number | string;
@@ -86,6 +88,27 @@ interface SplitData {
     highestAmount: number;
     lowestAmount: number;
   };
+}
+
+// 👇 NUEVO: Tipo para payment status
+interface PaymentStatus {
+  sessionId: string;
+  merchantWallet: string | null;
+  totalParticipants: number;
+  paidParticipants: number;
+  totalCollected: number;
+  totalAmount: number;
+  isFullyPaid: boolean;
+  participants: Array<{
+    participantId: string;
+    userId: string;
+    name: string | null;
+    walletAddress: string | null;
+    hasPaid: boolean;
+    amount: number;
+    txHash: string | null;
+    paidAt: string | null;
+  }>;
 }
 
 // ========= Helpers =========
@@ -252,6 +275,11 @@ export default function QRSplitApp() {
   const [currentUserId] = useState<string>(getStableUserId());
   const [currentUserName, setCurrentUserName] = useState('');
 
+  // NUEVO: Estados para Merchant Wallet
+  const [isSessionCreator, setIsSessionCreator] = useState(false);
+  const [merchantWallet, setMerchantWallet] = useState<string | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus | null>(null);
+
   const {
     isConnected,
     connectedUsers,
@@ -282,45 +310,47 @@ export default function QRSplitApp() {
   const searchParams = useSearchParams();
 
   // -------- Carga por URL --------
-useEffect(() => {
-  const sessionIdFromUrl = searchParams.get('sessionId');
-  const userNameFromUrl = searchParams.get('userName');
-  const walletAddressFromUrl = searchParams.get('walletAddress');
-  
-  if (sessionIdFromUrl && !currentSession) {
-    loadSessionFromUrl(sessionIdFromUrl);
-    if (userNameFromUrl) setCurrentUserName(userNameFromUrl);
-    
-    if (walletAddressFromUrl && !walletConnected) {
-      const shortAddress = `${walletAddressFromUrl.slice(0, 6)}...${walletAddressFromUrl.slice(-4)}`;
-      setError(`Conecta tu wallet (${shortAddress}) para poder realizar pagos blockchain`);
+  useEffect(() => {
+    const sessionIdFromUrl = searchParams.get('sessionId');
+    const userNameFromUrl = searchParams.get('userName');
+    const walletAddressFromUrl = searchParams.get('walletAddress');
+
+    if (sessionIdFromUrl && !currentSession) {
+      loadSessionFromUrl(sessionIdFromUrl);
+      if (userNameFromUrl) setCurrentUserName(userNameFromUrl);
+
+      if (walletAddressFromUrl && !walletConnected) {
+        const shortAddress = `${walletAddressFromUrl.slice(0, 6)}...${walletAddressFromUrl.slice(-4)}`;
+        setError(`Conecta tu wallet (${shortAddress}) para poder realizar pagos blockchain`);
+      }
     }
-  }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [searchParams, currentSession, walletConnected]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, currentSession, walletConnected]);
 
   const loadSessionFromUrl = async (sessionId: string) => {
-  setLoading(true);
-  try {
-    const resp = await fetch(`http://localhost:3000/api/sessions/${sessionId}`);
-    if (!resp.ok) throw new Error(`HTTP error! status: ${resp.status}`);
-    const data = await resp.json();
-    const session = (data.session || data) as Session;
-    session.items = (session.items || []).map((it) => ({ ...it, assignees: parseAssigneesSafe(it.assignees) }));
-    setCurrentSession(session);
-    
-    // ← NUEVO: Cargar blockchainSessionId si existe
-    if (session.blockchainSessionId) {
-      setBlockchainSessionId(session.blockchainSessionId);
+    setLoading(true);
+    try {
+      const resp = await fetch(`http://localhost:3000/api/sessions/${sessionId}`);
+      if (!resp.ok) throw new Error(`HTTP error! status: ${resp.status}`);
+      const data = await resp.json();
+      const session = (data.session || data) as Session;
+      session.items = (session.items || []).map((it) => ({ ...it, assignees: parseAssigneesSafe(it.assignees) }));
+      setCurrentSession(session);
+
+      // Merchant / Creador
+      if (session.merchantWallet) setMerchantWallet(session.merchantWallet);
+      if (session.createdBy === getStableUserId()) setIsSessionCreator(true);
+
+      // Blockchain
+      if (session.blockchainSessionId) setBlockchainSessionId(session.blockchainSessionId);
+
+      if (session.participants?.length > 0) await fetchSplitsForSession(sessionId);
+    } catch (e) {
+      setError('Error cargando sesión desde el enlace');
+    } finally {
+      setLoading(false);
     }
-    
-    if (session.participants?.length > 0) await fetchSplitsForSession(sessionId);
-  } catch (e) {
-    setError('Error cargando sesión desde el enlace');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const fetchSplitsForSession = async (sessionId: string) => {
     try {
@@ -333,6 +363,30 @@ useEffect(() => {
       console.error('Error cargando splits:', e);
     }
   };
+
+  // 👇 NUEVO: Fetch payment status
+  const fetchPaymentStatus = async () => {
+    if (!currentSession) return;
+    try {
+      const resp = await fetch(`http://localhost:3000/api/sessions/${currentSession.sessionId}/payment-status`);
+      if (resp.ok) {
+        const data = await resp.json();
+        setPaymentStatus(data);
+        if (data.merchantWallet) setMerchantWallet(data.merchantWallet);
+      }
+    } catch (e) {
+      console.error('Error cargando payment status:', e);
+    }
+  };
+
+  // 👇 NUEVO: Polling de payment status si es creador
+  useEffect(() => {
+    if (currentSession && isSessionCreator) {
+      fetchPaymentStatus();
+      const interval = setInterval(fetchPaymentStatus, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [currentSession?.sessionId, isSessionCreator]);
 
   // -------- Health --------
   useEffect(() => {
@@ -361,8 +415,13 @@ useEffect(() => {
       };
       setCurrentSession(updated);
       if (lastUpdate.splits) setSplits(lastUpdate.splits);
+
+      // Actualizar payment status en tiempo real si soy creador
+      if (isSessionCreator && lastUpdate.type === 'payment-made') {
+        fetchPaymentStatus();
+      }
     }
-  }, [lastUpdate, currentSession?.sessionId]);
+  }, [lastUpdate, currentSession?.sessionId, isSessionCreator]);
 
   useEffect(() => {
     if (currentSession && isConnected && currentUserName) {
@@ -425,32 +484,50 @@ useEffect(() => {
   }, [currentSession?.sessionId, walletConnected, walletAddress]);
 
   // -------- Acciones --------
-  const createSession = async () => {
-  setLoading(true);
-  setError(null);
-  try {
-    const response = await fetch('http://localhost:3000/api/sessions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ merchant_id: merchantId }),
-    });
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    const data = await response.json();
-    setCurrentSession(data.session);
-    const userName = prompt('Ingresa tu nombre para la sesión:') || `Usuario ${currentUserId.slice(-5)}`;
-    setCurrentUserName(userName);
 
-    if (walletConnected && walletAddress) {
+  // Crear sesión (requiere wallet) y guardar merchantWallet + blockchainSessionId
+  const createSession = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      if (!walletConnected || !walletAddress) {
+        setError('Conecta tu wallet para crear una sesión y recibir pagos');
+        setLoading(false);
+        return;
+      }
+
+      const response = await fetch('http://localhost:3000/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          merchant_id: merchantId,
+          merchant_wallet: walletAddress, // guardar wallet del comerciante
+          created_by: currentUserId,      // marcar creador
+        }),
+      });
+
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      setCurrentSession(data.session);
+      setIsSessionCreator(true);
+      setMerchantWallet(walletAddress);
+
+      const userName =
+        prompt('Ingresa tu nombre para la sesión:') || `Usuario ${currentUserId.slice(-5)}`;
+      setCurrentUserName(userName);
+
+      // Crear sesión en el smart contract (mock/hook)
       const r = await createBlockchainSession(
         data.session.sessionId,
         merchantId,
         walletAddress,
         parseFloat(data.session.totalAmount) || 0
       );
+
       if (r.success) {
         setBlockchainSessionId(data.session.sessionId);
-        
-        // Guardar blockchainSessionId en backend
+
+        // Persistir blockchainSessionId en backend
         try {
           await fetch(`http://localhost:3000/api/sessions/${data.session.sessionId}/blockchain`, {
             method: 'PUT',
@@ -460,16 +537,16 @@ useEffect(() => {
           console.log('✅ BlockchainSessionId guardado en backend');
         } catch (err) {
           console.error('❌ Error guardando blockchainSessionId:', err);
-          // No bloqueamos la ejecución si falla esto
+          // no bloqueamos el flujo si falla
         }
       }
+    } catch (err: any) {
+      setError(err?.message || 'Error creando sesión');
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    setError(err instanceof Error ? err.message : 'Error creando sesión');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
+
   const joinSession = async () => {
     if (!currentSession) return;
     try {
@@ -491,8 +568,8 @@ useEffect(() => {
         assignees: parseAssigneesSafe(it.assignees),
       }));
       setCurrentSession(data.session);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error uniéndose a sesión');
+    } catch (err: any) {
+      setError(err?.message || 'Error uniéndose a sesión');
     }
   };
 
@@ -522,27 +599,57 @@ useEffect(() => {
       setItemName('');
       setItemAmount('');
       setSelectedParticipants([]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error agregando item');
+    } catch (err: any) {
+      setError(err?.message || 'Error agregando item');
     } finally {
       setLoading(false);
       stopTyping?.();
     }
   };
 
+  // Pago individual → valida merchantWallet y registra pago
   const handleIndividualPayment = async (participant: Split) => {
-    if (!walletConnected || !walletAddress || !blockchainSessionId) {
+    if (!walletConnected || !walletAddress) {
       setError('Conecta tu wallet primero');
       return;
     }
+    if (!merchantWallet) {
+      setError('El creador de la sesión debe conectar su wallet primero');
+      return;
+    }
+    if (!blockchainSessionId) {
+      setError('Sesión blockchain no inicializada');
+      return;
+    }
+
     try {
       await syncWalletToBackend();
 
       setPaymentStates((prev) => ({ ...prev, [participant.userId]: 'paying' }));
+
+      // Simula pago on-chain (hook)
       const result = await makeBlockchainPayment(blockchainSessionId, walletAddress);
+
       if (result.success) {
-        setPaymentStates((prev) => ({ ...prev, [participant.userId]: 'paid' }));
-        setError(null);
+        // Registrar pago en backend (paga al merchantWallet configurado en la sesión)
+        const paymentResp = await fetch(`http://localhost:3000/api/sessions/${currentSession!.sessionId}/pay`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: currentUserId,
+            wallet_address: walletAddress,
+            amount: participant.amount,
+          }),
+        });
+
+        if (paymentResp.ok) {
+          setPaymentStates((prev) => ({ ...prev, [participant.userId]: 'paid' }));
+          setError(null);
+          if (isSessionCreator) fetchPaymentStatus();
+        } else {
+          const errorData = await paymentResp.json();
+          throw new Error(errorData.message || 'Error registrando pago en backend');
+        }
       } else {
         setPaymentStates((prev) => ({ ...prev, [participant.userId]: 'failed' }));
         setError(result.error || 'Error en el pago');
@@ -550,6 +657,31 @@ useEffect(() => {
     } catch (error: any) {
       setPaymentStates((prev) => ({ ...prev, [participant.userId]: 'failed' }));
       setError(error?.message || 'Error realizando pago');
+    }
+  };
+
+  // Finalizar sesión (solo creador)
+  const finalizeSession = async () => {
+    if (!currentSession || !isSessionCreator) return;
+
+    setLoading(true);
+    try {
+      const resp = await fetch(`http://localhost:3000/api/sessions/${currentSession.sessionId}/finalize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (resp.ok) {
+        setCurrentSession((prev) => (prev ? { ...prev, status: 'completed' } : prev));
+        alert('🎉 ¡Sesión finalizada! Todos los pagos han sido procesados.');
+      } else {
+        const errorData = await resp.json();
+        setError(errorData.error || 'Error finalizando sesión');
+      }
+    } catch (err) {
+      setError('Error finalizando sesión');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -585,6 +717,125 @@ useEffect(() => {
     } catch (err) {
       console.error('Error copying:', err);
     }
+  };
+
+  // 👇 NUEVO: Componente Merchant Dashboard
+  const MerchantDashboard = () => {
+    if (!isSessionCreator || !paymentStatus) return null;
+
+    return (
+      <Card className="lg:col-span-2 bg-gradient-to-br from-purple-900/30 to-blue-900/30 border-purple-500/30 backdrop-blur-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between text-white">
+            <div className="flex items-center gap-2">
+              <Shield className="w-5 h-5 text-purple-400" />
+              Panel del Comerciante
+            </div>
+            {merchantWallet && (
+              <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 font-mono text-xs">
+                {merchantWallet.slice(0, 6)}...{merchantWallet.slice(-4)}
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700">
+              <p className="text-slate-400 text-sm">Total a Recibir</p>
+              <p className="text-2xl font-bold text-purple-400">{formatCurrency(paymentStatus.totalAmount)}</p>
+            </div>
+            <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700">
+              <p className="text-slate-400 text-sm">Recibido</p>
+              <p className="text-2xl font-bold text-emerald-400">{formatCurrency(paymentStatus.totalCollected)}</p>
+            </div>
+            <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700">
+              <p className="text-slate-400 text-sm">Participantes</p>
+              <p className="text-2xl font-bold text-white">
+                {paymentStatus.paidParticipants}/{paymentStatus.totalParticipants}
+              </p>
+            </div>
+            <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700">
+              <p className="text-slate-400 text-sm">Estado</p>
+              <p className="text-2xl font-bold">
+                {paymentStatus.isFullyPaid ? <span className="text-emerald-400">✅</span> : <span className="text-yellow-400">⏳</span>}
+              </p>
+            </div>
+          </div>
+
+          {/* Lista de pagos */}
+          <div className="space-y-2">
+            <h4 className="font-medium text-white">Estado de Pagos:</h4>
+            {paymentStatus.participants.map((p, idx) => (
+              <div
+                key={idx}
+                className={`flex items-center justify-between p-3 rounded-lg border ${
+                  p.hasPaid ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-700/30 border-slate-600'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  {p.hasPaid ? (
+                    <CheckCircle className="w-5 h-5 text-emerald-400" />
+                  ) : (
+                    <Clock className="w-5 h-5 text-slate-400" />
+                  )}
+                  <div>
+                    <p className="font-medium text-white">{p.name || p.userId}</p>
+                    {p.walletAddress && (
+                      <p className="text-xs text-slate-400 font-mono">
+                        {p.walletAddress.slice(0, 6)}...{p.walletAddress.slice(-4)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right">
+                  {p.hasPaid ? (
+                    <>
+                      <p className="font-bold text-emerald-400">{formatCurrency(p.amount)}</p>
+                      {p.txHash && <p className="text-xs text-slate-400 font-mono">{p.txHash.slice(0, 10)}...</p>}
+                    </>
+                  ) : (
+                    <Badge className="bg-slate-500/20 text-slate-400 border-slate-500/30">Pendiente</Badge>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Botón finalizar */}
+          {paymentStatus.isFullyPaid && currentSession?.status !== 'completed' && (
+            <div className="pt-4 border-t border-slate-700">
+              <Button
+                onClick={finalizeSession}
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-semibold shadow-lg shadow-emerald-500/50"
+              >
+                <CheckCircle className="w-4 h-4 mr-2" />
+                Finalizar Sesión - Todos han pagado
+              </Button>
+            </div>
+          )}
+
+          {!paymentStatus.isFullyPaid && (
+            <div className="bg-yellow-500/10 border border-yellow-500/20 p-3 rounded-lg">
+              <p className="text-sm text-yellow-400 flex items-center">
+                <AlertCircle className="w-4 h-4 mr-2" />
+                Esperando que {paymentStatus.totalParticipants - paymentStatus.paidParticipants} participante(s) paguen
+              </p>
+            </div>
+          )}
+
+          {currentSession?.status === 'completed' && (
+            <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-lg">
+              <p className="text-sm text-emerald-400 flex items-center">
+                <CheckCircle className="w-4 h-4 mr-2" />
+                ¡Sesión completada! Total recibido: {formatCurrency(paymentStatus.totalCollected)}
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
   };
 
   // ========= Render =========
@@ -662,14 +913,18 @@ useEffect(() => {
               </Badge>
               <Badge
                 className={`${
-                  isConnected ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' : 'bg-slate-500/10 text-slate-400 border-slate-500/20'
+                  isConnected
+                    ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                    : 'bg-slate-500/10 text-slate-400 border-slate-500/20'
                 }`}
               >
                 Real-time: {isConnected ? '✅' : '🔄'}
               </Badge>
               <Badge
                 className={`${
-                  walletConnected ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' : 'bg-slate-500/10 text-slate-400 border-slate-500/20'
+                  walletConnected
+                    ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                    : 'bg-slate-500/10 text-slate-400 border-slate-500/20'
                 }`}
               >
                 <Wallet className="w-3 h-3 mr-1" />
@@ -722,19 +977,29 @@ useEffect(() => {
                   />
                 </div>
 
-                {!walletConnected && (
+                {/* Aviso de wallet requerida */}
+                {!walletConnected ? (
                   <div className="bg-yellow-500/10 border border-yellow-500/20 p-3 rounded-lg">
-                    <p className="text-sm text-yellow-400 flex items-center">
+                    <p className="text-sm text-yellow-400 flex items-center mb-2">
                       <AlertCircle className="w-4 h-4 mr-2" />
-                      Conecta tu wallet para habilitar pagos blockchain
+                      <strong>Conecta tu wallet para crear una sesión</strong>
                     </p>
+                    <p className="text-xs text-yellow-300">Tu wallet recibirá todos los pagos de los participantes</p>
+                  </div>
+                ) : (
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-lg">
+                    <p className="text-sm text-emerald-400 flex items-center">
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Wallet conectada: {walletAddress?.slice(0, 6)}...{walletAddress?.slice(-4)}
+                    </p>
+                    <p className="text-xs text-emerald-300 mt-1">Los pagos se enviarán a esta dirección</p>
                   </div>
                 )}
 
                 <Button
                   onClick={createSession}
-                  disabled={loading || !merchantId}
-                  className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold shadow-lg shadow-purple-500/50"
+                  disabled={loading || !merchantId || !walletConnected}
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold shadow-lg shadow-purple-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? 'Creando...' : '🚀 Crear & Generar QR'}
                 </Button>
@@ -750,7 +1015,9 @@ useEffect(() => {
                       <QrCode className="w-5 h-5 text-purple-400" />
                       Comparte tu sesión
                       {connectedUsers.length > 0 && (
-                        <Badge className="bg-purple-500/10 text-purple-400 border-purple-500/20">{connectedUsers.length} online</Badge>
+                        <Badge className="bg-purple-500/10 text-purple-400 border-purple-500/20">
+                          {connectedUsers.length} online
+                        </Badge>
                       )}
                     </div>
                     <div className="flex gap-2">
@@ -785,11 +1052,20 @@ useEffect(() => {
                             Sincronización activa
                           </div>
                         )}
+                        {isSessionCreator && merchantWallet && (
+                          <div className="flex items-center text-sm text-emerald-400">
+                            <Wallet className="w-4 h-4 mr-2" />
+                            Recibirás pagos en tu wallet
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Merchant Dashboard (solo creador) */}
+              <MerchantDashboard />
 
               {/* Info de sesión */}
               <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
@@ -858,10 +1134,7 @@ useEffect(() => {
                   )}
 
                   <div className="pt-4 border-t border-slate-700">
-                    <Button
-                      onClick={joinSession}
-                      className="w-full bg-purple-600 hover:bg-purple-700 text-white"
-                    >
+                    <Button onClick={joinSession} className="w-full bg-purple-600 hover:bg-purple-700 text-white">
                       <Users className="w-4 h-4 mr-2" />
                       Unirse a Sesión
                     </Button>
@@ -958,9 +1231,13 @@ useEffect(() => {
                           <div className="flex justify-between items-start">
                             <div className="flex-1">
                               <h4 className="font-medium text-white">{item.name}</h4>
-                              <p className="text-sm text-slate-400">Asignado a: {getParticipantNames(item.assignees || [])}</p>
+                              <p className="text-sm text-slate-400">
+                                Asignado a: {getParticipantNames(item.assignees || [])}
+                              </p>
                             </div>
-                            <span className="font-mono text-purple-400 text-lg">{formatCurrency(Number(item.amount))}</span>
+                            <span className="font-mono text-purple-400 text-lg">
+                              {formatCurrency(Number(item.amount))}
+                            </span>
                           </div>
                         </div>
                       ))}
@@ -996,6 +1273,16 @@ useEffect(() => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
+                    {/* Mostrar merchant wallet a los participantes */}
+                    {merchantWallet && !isSessionCreator && (
+                      <div className="mb-4 bg-purple-500/10 border border-purple-500/20 p-3 rounded-lg">
+                        <p className="text-sm text-purple-300 flex items-center">
+                          <Wallet className="w-4 h-4 mr-2" />
+                          Los pagos se enviarán a: {merchantWallet.slice(0, 6)}...{merchantWallet.slice(-4)}
+                        </p>
+                      </div>
+                    )}
+
                     <div className="space-y-3">
                       {splits.participants.map((participant: Split, index: number) => {
                         const isCurrentUser = participant.userId === currentUserId;
@@ -1017,14 +1304,16 @@ useEffect(() => {
                                   <h4 className="font-medium text-white flex items-center gap-2">
                                     {participant.name}
                                     {isCurrentUser && (
-                                      <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-xs">Tú</Badge>
+                                      <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-xs">
+                                        Tú
+                                      </Badge>
                                     )}
                                   </h4>
                                   <p className="text-sm text-slate-500">{participant.userId}</p>
                                 </div>
                               </div>
                               <div className="text-right">
-                                <p className={`text-lg font-bold ${isCurrentUser ? 'text-purple-400' : 'text-purple-400'}`}>
+                                <p className="text-lg font-bold text-purple-400">
                                   {formatCurrency(participant.amount)}
                                 </p>
                                 <p className="text-sm text-slate-500">{participant.percentage.toFixed(1)}% del total</p>
@@ -1061,7 +1350,7 @@ useEffect(() => {
                                   {paymentState !== 'paid' && (
                                     <Button
                                       onClick={() => handleIndividualPayment(participant)}
-                                      disabled={contractLoading}
+                                      disabled={contractLoading || !merchantWallet}
                                       size="sm"
                                       className="bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-500/50"
                                     >
@@ -1112,7 +1401,7 @@ useEffect(() => {
                 </div>
                 <div className="flex items-center gap-1">
                   <CheckCircle className="w-3 h-3 text-purple-400" />
-                  Mobile Ready
+                  Merchant Wallet
                 </div>
               </div>
             </div>

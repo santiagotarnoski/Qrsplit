@@ -270,6 +270,10 @@ const broadcastSessionUpdate = async (sessionId, updateType, data) => {
   }
 };
 
+// Utility: moneda
+const formatCurrency = (amount) =>
+  new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(amount);
+
 // Routes
 app.get('/', (req, res) => {
   const connectedSessions = Array.from(activeSessions.entries()).map(([sessionId, data]) => ({
@@ -279,7 +283,7 @@ app.get('/', (req, res) => {
   }));
 
   res.json({
-    message: 'QRSplit API v3.0 - Real-time Enabled',
+    message: 'QRSplit API v3.0 - Real-time + Merchant Wallet',
     status: 'running',
     timestamp: new Date().toISOString(),
     realtime: {
@@ -299,14 +303,16 @@ app.get('/', (req, res) => {
       'Live Session Updates',
       'Real-time Participant Tracking',
       'Auto-calculated Splits',
-      'Blockchain Integration'
+      'Merchant Wallet Support'
     ],
     endpoints: {
       health: '/health',
       sessions: '/api/sessions',
-      blockchain: '/api/sessions/:id/blockchain',
       payments: '/api/sessions/:id/pay',
       splits: '/api/sessions/:id/splits',
+      paymentStatus: '/api/sessions/:id/payment-status',
+      finalize: '/api/sessions/:id/finalize',
+      merchantWallet: '/api/sessions/:id/merchant-wallet',
       realtime: 'Socket.io events available'
     },
     splitMethods: {
@@ -344,17 +350,27 @@ app.get('/health', async (req, res) => {
   }
 });
 
-// Session management endpoints
+// ========================================
+// SESSION MANAGEMENT ENDPOINTS
+// ========================================
+
+// 1️⃣ POST /api/sessions - acepta merchant_wallet y created_by
 app.post('/api/sessions', async (req, res) => {
   try {
     console.log("📥 [POST /api/sessions] Body recibido:", req.body);
 
     const sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    const merchantWallet = req.body.merchant_wallet 
+      ? String(req.body.merchant_wallet).toLowerCase().trim()
+      : null;
+    const createdBy = req.body.created_by || null;
 
     const session = await prisma.session.create({
       data: {
         sessionId: sessionId,
-        merchantId: req.body.merchant_id || 'default_merchant'
+        merchantId: req.body.merchant_id || 'default_merchant',
+        merchantWallet: merchantWallet,
+        createdBy: createdBy
       },
       include: { participants: true, items: true, payments: true }
     });
@@ -366,6 +382,7 @@ app.post('/api/sessions', async (req, res) => {
     });
 
     console.log(`✅ Sesión creada en DB: ${sessionId}`);
+    console.log(`💰 Merchant wallet: ${merchantWallet || 'No configurada'}`);
 
     res.json({
       success: true,
@@ -421,6 +438,157 @@ app.get('/api/sessions/:sessionId', async (req, res) => {
   }
 });
 
+// 2️⃣ PUT /api/sessions/:sessionId/merchant-wallet
+app.put('/api/sessions/:sessionId/merchant-wallet', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { walletAddress, userId } = req.body;
+
+    if (!walletAddress) {
+      return res.status(400).json({ error: 'Wallet address required' });
+    }
+
+    const normalizedWallet = String(walletAddress).toLowerCase().trim();
+
+    const session = await prisma.session.update({
+      where: { sessionId },
+      data: { 
+        merchantWallet: normalizedWallet,
+        updatedAt: new Date()
+      }
+    });
+
+    console.log(`💰 [MERCHANT WALLET] Configurada para ${sessionId}: ${normalizedWallet}`);
+
+    await broadcastSessionUpdate(sessionId, 'merchant-wallet-configured', {
+      merchantWallet: normalizedWallet,
+      userId,
+      message: 'Wallet del comerciante configurada'
+    });
+
+    res.json({ success: true, session });
+  } catch (error) {
+    console.error('🔥 [ERROR /merchant-wallet]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3️⃣ GET /api/sessions/:sessionId/payment-status
+app.get('/api/sessions/:sessionId/payment-status', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    const session = await prisma.session.findUnique({
+      where: { sessionId },
+      include: {
+        participants: true,
+        payments: true
+      }
+    });
+
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+
+    const totalParticipants = session.participants.length;
+    const paidParticipants = new Set(
+      session.payments
+        .filter(p => p.status === 'success')
+        .map(p => p.participantId)
+    ).size;
+
+    const totalCollected = session.payments
+      .filter(p => p.status === 'success')
+      .reduce((sum, p) => sum + Number(p.amount), 0);
+
+    const isFullyPaid = totalParticipants > 0 && paidParticipants === totalParticipants;
+
+    const participantPayments = session.participants.map(participant => {
+      const payment = session.payments.find(
+        p => p.participantId === participant.id && p.status === 'success'
+      );
+      
+      return {
+        participantId: participant.id,
+        userId: participant.userId,
+        name: participant.name,
+        walletAddress: participant.walletAddress,
+        hasPaid: !!payment,
+        amount: payment ? Number(payment.amount) : 0,
+        txHash: payment?.txHash || null,
+        paidAt: payment?.createdAt || null
+      };
+    });
+
+    res.json({
+      sessionId,
+      merchantWallet: session.merchantWallet,
+      totalParticipants,
+      paidParticipants,
+      totalCollected,
+      totalAmount: Number(session.totalAmount),
+      isFullyPaid,
+      participants: participantPayments
+    });
+  } catch (error) {
+    console.error('🔥 [ERROR /payment-status]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 4️⃣ POST /api/sessions/:sessionId/finalize
+app.post('/api/sessions/:sessionId/finalize', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    const session = await prisma.session.findUnique({
+      where: { sessionId },
+      include: {
+        participants: true,
+        payments: true
+      }
+    });
+
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+
+    const totalParticipants = session.participants.length;
+    const paidParticipants = new Set(
+      session.payments
+        .filter(p => p.status === 'success')
+        .map(p => p.participantId)
+    ).size;
+
+    if (paidParticipants !== totalParticipants) {
+      return res.status(400).json({
+        error: 'Not all participants have paid',
+        paid: paidParticipants,
+        total: totalParticipants
+      });
+    }
+
+    const finalizedSession = await prisma.session.update({
+      where: { sessionId },
+      data: { 
+        status: 'completed',
+        updatedAt: new Date()
+      }
+    });
+
+    await broadcastSessionUpdate(sessionId, 'session-finalized', {
+      message: '¡Sesión completada! Todos los pagos han sido procesados',
+      totalCollected: session.payments.reduce((sum, p) => sum + Number(p.amount), 0)
+    });
+
+    res.json({ 
+      success: true, 
+      session: finalizedSession,
+      message: 'Sesión finalizada exitosamente'
+    });
+  } catch (error) {
+    console.error('🔥 [ERROR /finalize]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 🔄 Join con real-time broadcast (wallet normalizada)
 app.post('/api/sessions/:sessionId/join', async (req, res) => {
   try {
     console.log(`👤 [JOIN SESSION] Usuario intentando unirse a: ${req.params.sessionId}`);
@@ -516,31 +684,7 @@ app.put('/api/sessions/:sessionId/participants/:userId/wallet', async (req, res)
   }
 });
 
-// 🔗 NUEVO: Endpoint para guardar blockchainSessionId
-app.put('/api/sessions/:sessionId/blockchain', async (req, res) => {
-  try {
-    const { sessionId } = req.params;
-    const { blockchainSessionId } = req.body;
-
-    console.log(`🔗 [BLOCKCHAIN] Guardando blockchainSessionId para sesión ${sessionId}`);
-
-    const updatedSession = await prisma.session.update({
-      where: { sessionId },
-      data: { blockchainSessionId }
-    });
-
-    await broadcastSessionUpdate(sessionId, 'blockchain-session-created', {
-      blockchainSessionId,
-      message: 'Sesión blockchain creada'
-    });
-
-    res.json({ success: true, session: updatedSession });
-  } catch (error) {
-    console.error('🔥 [ERROR /blockchain]', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
+// Agregar items con real-time broadcast
 app.post('/api/sessions/:sessionId/items', async (req, res) => {
   try {
     console.log(`🧾 [ADD ITEM] ${req.body.name} → Sesión ${req.params.sessionId}`);
@@ -752,13 +896,13 @@ app.get('/api/sessions/:sessionId/connected-users', (req, res) => {
   });
 });
 
-const formatCurrency = (amount) =>
-  new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 }).format(amount);
-
+// ========================================
+//  POST /api/sessions/:sessionId/pay - paga al merchantWallet
+// ========================================
 app.post('/api/sessions/:sessionId/pay', async (req, res) => {
   try {
     const { sessionId } = req.params;
-    let { user_id, wallet_address, amount, to_address, token_address } = req.body;
+    let { user_id, wallet_address, amount, token_address } = req.body;
 
     wallet_address = wallet_address ? String(wallet_address).toLowerCase().trim() : null;
     user_id = user_id ? String(user_id).trim() : null;
@@ -766,8 +910,21 @@ app.post('/api/sessions/:sessionId/pay', async (req, res) => {
 
     console.log('💳 [PAY] payload =', { sessionId, user_id, wallet_address, amount });
 
-    const session = await prisma.session.findUnique({ where: { sessionId } });
+    // Obtener sesión con merchantWallet
+    const session = await prisma.session.findUnique({ 
+      where: { sessionId },
+      select: { merchantWallet: true }
+    });
+    
     if (!session) return res.status(404).json({ error: 'Session not found' });
+    
+    // Validar que haya merchant wallet configurada
+    if (!session.merchantWallet) {
+      return res.status(400).json({ 
+        error: 'Merchant wallet not configured for this session',
+        message: 'El creador de la sesión debe conectar su wallet primero'
+      });
+    }
 
     const participant = await prisma.participant.findFirst({
       where: {
@@ -787,33 +944,51 @@ app.post('/api/sessions/:sessionId/pay', async (req, res) => {
       });
     }
 
-    const txHash = '0x' + Math.random().toString(16).slice(2);
+    // TODO: llamada real a smart contract de Starknet aquí
+    const txHash = '0x' + Math.random().toString(16).slice(2); // mock por ahora
 
     const payment = await prisma.payment.create({
       data: {
         sessionId,
         participantId: participant.id,
         fromAddress: wallet_address ?? 'unknown',
-        toAddress: (to_address || process.env.MERCHANT_WALLET || 'merchant').toLowerCase(),
+        toAddress: session.merchantWallet, // paga al merchant
         amount,
-        tokenAddress: (token_address || process.env.TOKEN_ADDRESS || 'native').toLowerCase(),
+        tokenAddress: (token_address || process.env.TOKEN_ADDRESS || 'ETH').toLowerCase(),
         status: 'success',
         txHash
       }
     });
 
+    console.log(`✅ [PAYMENT SUCCESS] ${wallet_address} → ${session.merchantWallet}: ${amount}`);
+
     await broadcastSessionUpdate(sessionId, 'payment-made', {
       payment,
+      participant: {
+        id: participant.id,
+        name: participant.name,
+        userId: participant.userId
+      },
+      merchantWallet: session.merchantWallet,
       message: `${participant.name || participant.userId} pagó ${formatCurrency(amount)}`
     });
 
-    res.json({ success: true, txHash, payment, participantId: participant.id });
+    res.json({ 
+      success: true, 
+      txHash, 
+      payment, 
+      participantId: participant.id,
+      merchantWallet: session.merchantWallet 
+    });
   } catch (error) {
     console.error('🔥 [ERROR /pay]', error);
     res.status(500).json({ error: error.message });
   }
 });
-// SOCKET.IO REAL-TIME MEJORADO
+
+// ========================================
+// SOCKET.IO REAL-TIME
+// ========================================
 io.on('connection', (socket) => {
   console.log(`🔌 Usuario conectado: ${socket.id}`);
 
@@ -940,6 +1115,10 @@ io.on('connection', (socket) => {
   });
 });
 
+// ========================================
+// ERROR HANDLERS
+// ========================================
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
@@ -952,9 +1131,11 @@ app.use((req, res) => {
       'POST /api/sessions',
       'GET /api/sessions/:id',
       'GET /api/sessions/:id/connected-users',
+      'GET /api/sessions/:id/payment-status',
+      'PUT /api/sessions/:id/merchant-wallet',
+      'POST /api/sessions/:id/finalize',
       'POST /api/sessions/:id/join',
       'PUT /api/sessions/:id/participants/:userId/wallet',
-      'PUT /api/sessions/:id/blockchain',
       'POST /api/sessions/:id/items',
       'PUT /api/sessions/:id/items/:itemId/assignees',
       'GET /api/sessions/:id/splits',
@@ -989,51 +1170,51 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
+// ========================================
+// START SERVER
+// ========================================
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log('');
-  console.log('✅ QRSplit Express API v3.0 con Real-time completo!');
+  console.log('✅ QRSplit Express API v3.0 - Real-time + Merchant Wallet!');
   console.log(`🚀 Servidor corriendo en: http://localhost:${PORT}`);
   console.log(`🔄 Socket.io habilitado para real-time sync`);
   console.log(`🐘 PostgreSQL conectado via Prisma ORM`);
   console.log(`🧮 Split Engine activado`);
-  console.log(`🔗 Blockchain integration ready`);
+  console.log(`💰 Merchant Wallet Support habilitado`);
   console.log(`🌍 Modo: ${process.env.NODE_ENV || 'development'}`);
   console.log('');
   console.log('📋 Endpoints disponibles:');
   console.log('   GET  /                        - Info de la API');
   console.log('   GET  /health                  - Health check');
-  console.log('   POST /api/sessions            - Crear sesión');
+  console.log('   POST /api/sessions            - Crear sesión (con merchant_wallet)');
   console.log('   GET  /api/sessions/:id        - Obtener sesión');
   console.log('   GET  /api/sessions/:id/connected-users - Usuarios conectados');
+  console.log('   GET  /api/sessions/:id/payment-status  - Estado de pagos 💰');
+  console.log('   PUT  /api/sessions/:id/merchant-wallet - Configurar merchant wallet 💰');
+  console.log('   POST /api/sessions/:id/finalize        - Finalizar sesión 💰');
   console.log('   POST /api/sessions/:id/join   - Unirse a sesión');
   console.log('   PUT  /api/sessions/:id/participants/:userId/wallet - Actualizar wallet');
-  console.log('   PUT  /api/sessions/:id/blockchain - Guardar blockchain session ID');
   console.log('   POST /api/sessions/:id/items  - Agregar item');
   console.log('   PUT  /api/sessions/:id/items/:itemId/assignees - Actualizar asignaciones');
   console.log('   GET  /api/sessions/:id/splits - Obtener splits');
   console.log('   POST /api/sessions/:id/calculate-splits - Calcular splits');
-  console.log('   POST /api/sessions/:id/pay    - Pagar (userId o wallet)');
+  console.log('   POST /api/sessions/:id/pay    - Pagar (paga al merchantWallet) 💰');
   console.log('');
   console.log('🔄 Socket.io Events disponibles:');
-  console.log('   join-session     → Unirse a sesión en tiempo real');
-  console.log('   leave-session    → Salir de sesión');
-  console.log('   typing-start     → Indicador de escritura');
-  console.log('   typing-stop      → Parar indicador');
-  console.log('   ping/pong        → Heartbeat para conexión');
-  console.log('');
-  console.log('📡 Real-time Updates automáticos:');
-  console.log('   session-updated      → Cambios en la sesión');
-  console.log('   participant-joined   → Nuevo participante');
-  console.log('   item-added           → Nuevo item agregado');
-  console.log('   payment-made         → Pago realizado');
-  console.log('   splits-calculated    → División calculada');
-  console.log('   user-connected       → Usuario se conectó');
-  console.log('   user-disconnected    → Usuario se desconectó');
-  console.log('   user-typing          → Usuario escribiendo');
-  console.log('   blockchain-session-created → Sesión blockchain creada');
+  console.log('   session-updated          → Cambios en la sesión');
+  console.log('   participant-joined       → Nuevo participante');
+  console.log('   item-added               → Nuevo item agregado');
+  console.log('   payment-made             → Pago realizado 💰');
+  console.log('   merchant-wallet-configured → Wallet configurada 💰');
+  console.log('   session-finalized        → Sesión completada 💰');
+  console.log('   splits-calculated        → División calculada');
+  console.log('   user-connected           → Usuario se conectó');
+  console.log('   user-disconnected        → Usuario se desconectó');
+  console.log('   user-typing              → Usuario escribiendo');
   console.log('');
   console.log('🧮 Métodos de división soportados: equal | proportional | weighted | custom');
   console.log('');
   console.log('🎯 Ready para recibir requests y conexiones real-time!');
+  console.log('💰 Merchant Wallet Flow: Creador recibe todos los pagos!');
 });
