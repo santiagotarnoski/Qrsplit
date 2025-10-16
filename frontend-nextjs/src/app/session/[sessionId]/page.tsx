@@ -19,6 +19,12 @@ interface Session {
   items: any[];
 }
 
+// Helper para construir URLs del backend sin dobles barras
+const apiUrl = (path: string) => {
+  const base = (process.env.NEXT_PUBLIC_BACKEND_URL || '').replace(/\/$/, '');
+  return `${base}${path}`;
+};
+
 export default function SessionPage() {
   const params = useParams();
   const router = useRouter();
@@ -31,17 +37,18 @@ export default function SessionPage() {
   const [joining, setJoining] = useState(false);
 
   useEffect(() => {
-    if (sessionId) {
-      fetchSession();
-    }
+    if (sessionId) fetchSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   const fetchSession = async () => {
     try {
-      const response = await fetch(`http://localhost:3000/api/sessions/${sessionId}`);
-      if (!response.ok) throw new Error('Sesión no encontrada');
-      const data = await response.json();
+      const res = await fetch(apiUrl(`/api/sessions/${sessionId}`), { cache: 'no-store' });
+      if (!res.ok) {
+        const msg = await safeMessage(res);
+        throw new Error(msg || 'Sesión no encontrada');
+      }
+      const data = await res.json();
       setSession(data.session || data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error cargando sesión');
@@ -57,19 +64,20 @@ export default function SessionPage() {
     try {
       const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
 
-      const response = await fetch(`http://localhost:3000/api/sessions/${sessionId}/join`, {
+      const res = await fetch(apiUrl(`/api/sessions/${sessionId}/join`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: userId,
           name: userName.trim(),
-          // wallet_address no se envía aquí; se conectará luego en /app
         }),
       });
 
-      if (!response.ok) throw new Error('Error uniéndose a la sesión');
+      if (!res.ok) {
+        const msg = await safeMessage(res);
+        throw new Error(msg || 'Error uniéndose a la sesión');
+      }
 
-      // Redirect al app principal con parámetros mínimos
       const qs = new URLSearchParams({
         sessionId,
         userName: userName.trim(),
@@ -83,6 +91,16 @@ export default function SessionPage() {
       setError(err instanceof Error ? err.message : 'Error uniéndose a sesión');
     } finally {
       setJoining(false);
+    }
+  };
+
+  // Intenta leer mensaje de error del backend si lo hubiera
+  const safeMessage = async (res: Response) => {
+    try {
+      const data = await res.json();
+      return (data && (data.message || data.error)) as string | undefined;
+    } catch {
+      return undefined;
     }
   };
 
@@ -172,25 +190,23 @@ export default function SessionPage() {
                 </div>
               </div>
 
-              {/* Participantes actuales */}
               {session.participants && session.participants.length > 0 && (
                 <div className="mb-4">
                   <h4 className="font-medium mb-2 text-white">Participantes actuales:</h4>
                   <div className="space-y-1">
-                    {session.participants.map((participant: any, index: number) => (
+                    {session.participants.map((p: any, i: number) => (
                       <div
-                        key={index}
+                        key={i}
                         className="flex items-center text-sm bg-purple-500/10 border border-purple-500/20 p-2 rounded"
                       >
                         <Users className="w-4 h-4 mr-2 text-purple-400" />
-                        <span className="text-slate-200">{participant.name || participant.userId}</span>
+                        <span className="text-slate-200">{p.name || p.userId}</span>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Items en la cuenta (solo lectura) */}
               {session.items && session.items.length > 0 && (
                 <div className="mt-4">
                   <h4 className="font-medium mb-2 text-white flex items-center">
@@ -198,8 +214,8 @@ export default function SessionPage() {
                     Items en la cuenta:
                   </h4>
                   <div className="space-y-1">
-                    {session.items.map((item: any, index: number) => (
-                      <div key={index} className="flex justify-between text-sm bg-slate-700/30 p-2 rounded">
+                    {session.items.map((item: any, i: number) => (
+                      <div key={i} className="flex justify-between text-sm bg-slate-700/30 p-2 rounded">
                         <span className="text-slate-200">{item.name}</span>
                         <span className="font-mono text-slate-300">${parseFloat(item.amount).toFixed(2)}</span>
                       </div>
