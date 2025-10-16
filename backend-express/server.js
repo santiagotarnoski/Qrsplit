@@ -13,6 +13,12 @@ const app = express();
 const server = createServer(app);
 const prisma = new PrismaClient();
 
+// ---- Config dinámica de URLs/orígenes
+const FRONTEND_URL = (process.env.BASE_FRONTEND_URL || 'http://localhost:3001').replace(/\/$/, '');
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ||
+  'http://localhost:3000,http://localhost:3001,https://qrsplit.vercel.app'
+).split(',').map(s => s.trim());
+
 // --- util para parsear assignees que pueden venir como string/JSON
 const parseAssignees = (assigneesString) => {
   try {
@@ -25,16 +31,11 @@ const parseAssignees = (assigneesString) => {
 
 const io = new Server(server, {
   cors: {
-    origin: [
-      "http://localhost:3000",
-      "http://localhost:3001",
-      "https://qrsplit.vercel.app"
-    ],
+    origin: ALLOWED_ORIGINS,
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
   }
 });
-
 
 // 🔄 REAL-TIME: Store para sesiones activas y usuarios conectados
 const activeSessions = new Map();
@@ -47,16 +48,11 @@ app.use(morgan('combined'));
 
 // CORS configuration
 app.use(cors({
-  origin: [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "https://qrsplit.vercel.app"
-  ],
+  origin: ALLOWED_ORIGINS,
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
-
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -332,7 +328,8 @@ app.get('/', (req, res) => {
       proportional: 'División por items consumidos',
       weighted: 'División con pesos personalizados',
       custom: 'Montos específicos por persona'
-    }
+    },
+    webLinkTemplate: `${FRONTEND_URL}/session/:sessionId`
   });
 });
 
@@ -396,12 +393,14 @@ app.post('/api/sessions', async (req, res) => {
     console.log(`✅ Sesión creada en DB: ${sessionId}`);
     console.log(`💰 Merchant wallet: ${merchantWallet || 'No configurada'}`);
 
+    const webLink = `${FRONTEND_URL}/session/${sessionId}`;
+
     res.json({
       success: true,
       session_id: sessionId,
       session,
       qr_code: `qrsplit://session/${sessionId}`,
-      web_link: `http://localhost:3001/session/${sessionId}`
+      web_link: webLink
     });
 
   } catch (error) {
