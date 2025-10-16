@@ -341,7 +341,7 @@ function QRSplitApp() {
   const loadSessionFromUrl = async (sessionId: string) => {
     setLoading(true);
     try {
-      const resp = await fetch(`http://localhost:3000/api/sessions/${sessionId}`);
+      const resp = await fetch(`https://qrsplit-backend.onrender.com/api/sessions/${sessionId}`);
       if (!resp.ok) throw new Error(`HTTP error! status: ${resp.status}`);
       const data = await resp.json();
       const session = (data.session || data) as Session;
@@ -365,7 +365,7 @@ function QRSplitApp() {
 
   const fetchSplitsForSession = async (sessionId: string) => {
     try {
-      const resp = await fetch(`http://localhost:3000/api/sessions/${sessionId}/splits`);
+      const resp = await fetch(`https://qrsplit-backend.onrender.com/api/sessions/${sessionId}/splits`);
       if (resp.ok) {
         const data = await resp.json();
         setSplits(data.splits);
@@ -379,7 +379,7 @@ function QRSplitApp() {
   const fetchPaymentStatus = async () => {
     if (!currentSession) return;
     try {
-      const resp = await fetch(`http://localhost:3000/api/sessions/${currentSession.sessionId}/payment-status`);
+      const resp = await fetch(`https://qrsplit-backend.onrender.com/api/sessions/${currentSession.sessionId}/payment-status`);
       if (resp.ok) {
         const data = await resp.json();
         setPaymentStatus(data);
@@ -403,7 +403,7 @@ function QRSplitApp() {
   useEffect(() => {
     (async () => {
       try {
-        const response = await fetch('http://localhost:3000/health');
+        const response = await fetch('https://qrsplit-backend.onrender.com/health');
         await response.json();
         setApiStatus('connected');
       } catch {
@@ -507,7 +507,7 @@ function QRSplitApp() {
         return;
       }
 
-      const response = await fetch('http://localhost:3000/api/sessions', {
+      const response = await fetch('https://qrsplit-backend.onrender.com/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -540,7 +540,7 @@ function QRSplitApp() {
 
         // Persistir blockchainSessionId en backend
         try {
-          await fetch(`http://localhost:3000/api/sessions/${data.session.sessionId}/blockchain`, {
+          await fetch(`https://qrsplit-backend.onrender.com/api/sessions/${data.session.sessionId}/blockchain`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ blockchainSessionId: data.session.sessionId }),
@@ -592,7 +592,7 @@ function QRSplitApp() {
       const assignees =
         selectedParticipants.length > 0 ? selectedParticipants : currentSession.participants.map((p) => p.id);
 
-      const resp = await fetch(`http://localhost:3000/api/sessions/${currentSession.sessionId}/items`, {
+      const resp = await fetch(`https://qrsplit-backend.onrender.com/api/sessions/${currentSession.sessionId}/items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: itemName, amount: itemAmount, tax: 0, tip: 0, assignees }),
@@ -643,7 +643,7 @@ function QRSplitApp() {
 
       if (result.success) {
         // Registrar pago en backend (paga al merchantWallet configurado en la sesión)
-        const paymentResp = await fetch(`http://localhost:3000/api/sessions/${currentSession!.sessionId}/pay`, {
+        const paymentResp = await fetch(`https://qrsplit-backend.onrender.com/api/sessions/${currentSession!.sessionId}/pay`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
