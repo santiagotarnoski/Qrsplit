@@ -395,13 +395,17 @@ app.post('/api/sessions', async (req, res) => {
 
     const webLink = `${FRONTEND_URL}/session/${sessionId}`;
 
-    res.json({
-      success: true,
-      session_id: sessionId,
-      session,
-      qr_code: `qrsplit://session/${sessionId}`,
-      web_link: webLink
-    });
+    // Detectar entorno (local o producción)
+const FRONTEND_URL = process.env.FRONTEND_URL || "https://qrsplit.vercel.app";
+
+res.json({
+  success: true,
+  session_id: sessionId,
+  session,
+  qr_code: `qrsplit://session/${sessionId}`,
+  web_link: `${FRONTEND_URL}/session/${sessionId}`
+});
+
 
   } catch (error) {
     console.error("🔥 [ERROR /api/sessions] No se pudo crear la sesión:", error);
