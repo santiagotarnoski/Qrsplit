@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { Suspense, useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -259,8 +259,19 @@ const CustomQRCode: React.FC<{ value: string; size?: number }> = ({ value, size 
   return <canvas ref={canvasRef} className="rounded-lg shadow-xl" style={{ maxWidth: '100%', height: 'auto' }} />;
 };
 
-// ========= Página =========
-export default function QRSplitApp() {
+/** =========
+ *  WRAPPER con Suspense (fix para Vercel/SSR con useSearchParams)
+ *  ========= */
+export default function QRSplitPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-white">Cargando sesión...</div>}>
+      <QRSplitApp />
+    </Suspense>
+  );
+}
+
+// ========= Página (contenido real) =========
+function QRSplitApp() {
   const [currentSession, setCurrentSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
