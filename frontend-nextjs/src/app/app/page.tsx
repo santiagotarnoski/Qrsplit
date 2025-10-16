@@ -448,7 +448,7 @@ function QRSplitApp() {
     if (!currentSession || !walletConnected || !walletAddress) return;
     try {
       let res = await fetch(
-        `http://localhost:3000/api/sessions/${currentSession.sessionId}/participants/${currentUserId}/wallet`,
+  `https://qrsplit-backend.onrender.com/api/sessions/${currentSession.sessionId}/participants/${currentUserId}/wallet`,
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -457,7 +457,7 @@ function QRSplitApp() {
       );
 
       if (res.status === 404) {
-        await fetch(`http://localhost:3000/api/sessions/${currentSession.sessionId}/join`, {
+        await fetch(`https://qrsplit-backend.onrender.com/api/sessions/${currentSession.sessionId}/join`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -468,7 +468,7 @@ function QRSplitApp() {
         });
 
         res = await fetch(
-          `http://localhost:3000/api/sessions/${currentSession.sessionId}/participants/${currentUserId}/wallet`,
+  `https://qrsplit-backend.onrender.com/api/sessions/${currentSession.sessionId}/participants/${currentUserId}/wallet`,
           {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -563,7 +563,7 @@ function QRSplitApp() {
     try {
       const userName = prompt('Ingresa tu nombre:') || `User ${Date.now()}`;
       setCurrentUserName(userName);
-      const response = await fetch(`http://localhost:3000/api/sessions/${currentSession.sessionId}/join`, {
+      const response = await fetch(`https://qrsplit-backend.onrender.com/api/sessions/${currentSession.sessionId}/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
