@@ -1174,10 +1174,12 @@ setInterval(() => {
 // START SERVER
 // ========================================
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+const HOST = '0.0.0.0'; // 👈 necesario para Render
+
+server.listen(PORT, HOST, () => {
   console.log('');
   console.log('✅ QRSplit Express API v3.0 - Real-time + Merchant Wallet!');
-  console.log(`🚀 Servidor corriendo en: http://localhost:${PORT}`);
+  console.log(`🚀 Servidor corriendo en: http://${HOST}:${PORT}`);
   console.log(`🔄 Socket.io habilitado para real-time sync`);
   console.log(`🐘 PostgreSQL conectado via Prisma ORM`);
   console.log(`🧮 Split Engine activado`);
